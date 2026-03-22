@@ -1,0 +1,11 @@
+process.env.ANTHROPIC_API_KEY ??= "test-anthropic-key";
+process.env.ANTHROPIC_MODEL ??= "anthropic/claude-haiku-4-5";
+process.env.OWNER_PHONE ??= "+819012345678";
+process.env.DATABASE_URL ??= "file:./data/test-agent.db";
+process.env.IMESSAGE_SCHEDULER_PERSIST_PATH ??= "./data/test-imessage-scheduler.json";
+process.env.ALLIUM_API_KEY ??= "";
+process.env.MCP_TIMEOUT_MS ??= "1000";
+process.env.LOG_LEVEL ??= "error";
+process.env.HEARTBEAT_INTERVAL_MS ??= "60000";
+process.env.HEARTBEAT_ACTIVE_START ??= "08:00";
+process.env.HEARTBEAT_ACTIVE_END ??= "22:00";
