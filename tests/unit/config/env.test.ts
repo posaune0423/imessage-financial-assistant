@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { env } from "../../src/env";
+import { env } from "../../../src/env";
 
 describe("env", () => {
   it("has required fields populated", () => {

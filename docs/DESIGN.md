@@ -149,7 +149,7 @@ sequenceDiagram
 ## 2. フォルダ構成
 
 ```
-imessage-mastra-agent/
+imessage-financial-assistant/
 │
 ├── docs/
 │   ├── DESIGN.md                   # 技術設計書（本ファイル）
@@ -495,7 +495,7 @@ if (import.meta.main) {
 
 ```json
 {
-  "name": "imessage-mastra-agent",
+  "name": "imessage-financial-assistant",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -613,8 +613,8 @@ dist/
 
 ```bash
 # 1. プロジェクト作成
-mkdir imessage-mastra-agent
-cd imessage-mastra-agent
+mkdir imessage-financial-assistant
+cd imessage-financial-assistant
 bun init -y
 
 # 2. 依存インストール

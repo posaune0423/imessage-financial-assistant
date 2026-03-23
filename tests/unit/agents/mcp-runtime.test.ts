@@ -2,7 +2,7 @@ import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { describe, expect, it, vi } from "vitest";
 
-import type { McpConfig } from "../../src/config";
+import type { McpConfig } from "../../../src/config";
 
 vi.mock("@mastra/mcp", () => {
   class FakeMCPClient {
@@ -59,7 +59,7 @@ async function executeTool(tool: unknown, args: unknown) {
 
 describe("createMcpRuntime", () => {
   it("builds the allium server and executes an MCP toolset tool", async () => {
-    const { createMcpRuntime } = await import("../../src/agents/mcp");
+    const { createMcpRuntime } = await import("../../../src/agents/mcp");
     const config: McpConfig = {
       timeoutMs: 1_000,
       servers: {
@@ -81,7 +81,7 @@ describe("createMcpRuntime", () => {
   });
 
   it("returns empty toolsets when no MCP server is configured", async () => {
-    const { createMcpRuntime } = await import("../../src/agents/mcp");
+    const { createMcpRuntime } = await import("../../../src/agents/mcp");
     const runtime = createMcpRuntime({
       timeoutMs: 1_000,
       servers: {

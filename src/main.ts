@@ -1,13 +1,11 @@
-import { IMessageSDK } from "@photon-ai/imessage-kit";
 import type { RecurringMessage, ScheduledMessage, SchedulerEvents } from "@photon-ai/imessage-kit";
 import type { ToolsetsInput } from "@mastra/core/agent";
 
-import { appConfig } from "./config";
-import { createGeneralAgent } from "./agents/general-agent";
 import { HeartbeatEngine } from "./agents/heartbeat";
-import { createMcpRuntime } from "./agents/mcp";
 import { createAgentRequestContext } from "./agents/request-context";
-import { createAgentToolRuntime, createAgentTools } from "./agents/tools";
+import { buildAppContainer } from "./di";
+import type { UserContextResolver } from "./domain/users/user-context";
+import type { TurnkeyProvisioningService } from "./lib/turnkey/provisioning";
 import { logger } from "./utils/logger";
 import { acquireProcessLock } from "./utils/process-lock";
 
@@ -40,10 +38,30 @@ interface StepLike {
   toolResults?: ToolResultLike[];
 }
 
+function isStepLike(step: unknown): step is StepLike {
+  return typeof step === "object" && step !== null;
+}
+
 interface DirectMessageHandlerDeps {
   ownerPhone: string;
-  agent: ReturnType<typeof createGeneralAgent>;
+  agent: {
+    generate: (
+      message: string,
+      options: {
+        memory: {
+          resource: string;
+          thread: string;
+        };
+        maxSteps?: number;
+        toolsets?: ToolsetsInput;
+        requestContext?: ReturnType<typeof createAgentRequestContext>;
+        onStepFinish?: (step: unknown) => Promise<void>;
+      },
+    ) => Promise<{ text: string }>;
+  };
   sendMessage: (to: string, text: string) => Promise<unknown>;
+  userContextResolver: UserContextResolver;
+  turnkeyProvisioning: TurnkeyProvisioningService;
   resolveToolsets?: () => Promise<ToolsetsInput>;
   maxSteps?: number;
 }
@@ -180,21 +198,54 @@ export function createDirectMessageHandler(deps: DirectMessageHandlerDeps) {
     logger.info(`[imessage] <- sender=${sender} target=${replyTarget} text=${JSON.stringify(text)}`);
 
     try {
+      const userContext = await deps.userContextResolver.resolve({
+        sender: message.sender,
+        chatId: message.chatId,
+        text,
+      });
+
+      if (!userContext.wallet || userContext.wallet.status === "none" || userContext.wallet.status === "failed") {
+        await deps.turnkeyProvisioning.ensurePrimaryWallet(userContext);
+      }
+
+      const freshUserContext = await deps.userContextResolver.resolve({
+        sender: message.sender,
+        chatId: message.chatId,
+        text,
+      });
       const requestContext = createAgentRequestContext({
         sender,
         chatId: message.chatId ?? undefined,
         ownerPhone: deps.ownerPhone,
+        incomingText: text,
+        appUserId: freshUserContext.id,
+        resourceKey: freshUserContext.resourceKey,
+        walletAddress: freshUserContext.wallet?.address ?? undefined,
+        walletStatus: freshUserContext.wallet?.status ?? "none",
+        signerStatus: freshUserContext.wallet?.signerStatus ?? "not_bootstrapped",
+        turnkeyOrganizationId: freshUserContext.wallet?.turnkeyOrganizationId ?? undefined,
+        turnkeyWalletId: freshUserContext.wallet?.turnkeyWalletId ?? undefined,
+        turnkeyAccountId: freshUserContext.wallet?.turnkeyAccountId ?? undefined,
+        turnkeyDelegatedUserId: freshUserContext.wallet?.turnkeyDelegatedUserId ?? undefined,
       });
       const toolsets = shouldResolveMcpToolsets(text) ? await deps.resolveToolsets?.() : undefined;
       const result = await deps.agent.generate(text, {
-        memory: { resource: replyTarget, thread: "default" },
+        memory: { resource: freshUserContext.resourceKey, thread: "default" },
         maxSteps: deps.maxSteps,
         toolsets,
         requestContext,
         onStepFinish: async (step) => {
-          logToolStep(step as StepLike);
+          if (!isStepLike(step)) {
+            return;
+          }
 
-          if (sentToolProgressReply || !shouldSendToolProgressReply(step as StepLike)) {
+          logToolStep(step);
+
+          if (sentToolProgressReply || !shouldSendToolProgressReply(step)) {
+            return;
+          }
+
+          if (!replyTarget) {
             return;
           }
 
@@ -221,33 +272,24 @@ export function createDirectMessageHandler(deps: DirectMessageHandlerDeps) {
 
 export async function main() {
   const releaseProcessLock = acquireProcessLock(PROCESS_LOCK_PATH);
-  const sdk = new IMessageSDK({
-    watcher: { excludeOwnMessages: true },
-  });
-  const sendMessage = async (to: string, text: string) => sdk.send(to, text);
-
-  const toolRuntime = createAgentToolRuntime(sdk, appConfig.tools.runtime, {
-    scheduler: createSchedulingLifecycleLogger("scheduler"),
-    reminders: createSchedulingLifecycleLogger("reminder"),
-  });
-  const builtInTools = createAgentTools(toolRuntime, appConfig.tools);
-  const agent = createGeneralAgent(appConfig.agent, builtInTools);
-  const mcp = createMcpRuntime(appConfig.mcp);
+  const app = await buildAppContainer();
 
   const heartbeat = new HeartbeatEngine({
-    agent,
-    ownerPhone: appConfig.ownerPhone,
-    sendMessage,
-    heartbeat: appConfig.heartbeat,
-    maxSteps: appConfig.agent.maxSteps,
+    agent: app.agent,
+    ownerPhone: app.config.ownerPhone,
+    sendMessage: async (to, text) => app.sdk.send(to, text),
+    heartbeat: app.config.heartbeat,
+    maxSteps: app.config.agent.maxSteps,
   });
 
   const onDirectMessage = createDirectMessageHandler({
-    ownerPhone: appConfig.ownerPhone,
-    agent,
-    sendMessage,
-    resolveToolsets: mcp.getToolsets,
-    maxSteps: appConfig.agent.maxSteps,
+    ownerPhone: app.config.ownerPhone,
+    agent: app.agent,
+    sendMessage: async (to, text) => app.sdk.send(to, text),
+    userContextResolver: app.userContextResolver,
+    turnkeyProvisioning: app.turnkeyProvisioning,
+    resolveToolsets: app.mcpRuntime.getToolsets,
+    maxSteps: app.config.agent.maxSteps,
   });
 
   let isShuttingDown = false;
@@ -258,11 +300,12 @@ export async function main() {
 
     isShuttingDown = true;
     logger.info("Shutting down...");
-    toolRuntime.destroy();
+    app.toolRuntime.destroy();
     heartbeat.stop();
-    sdk.stopWatching();
-    await mcp.client?.disconnect();
-    await sdk.close();
+    app.sdk.stopWatching();
+    await app.mcpRuntime.client?.disconnect();
+    await app.sdk.close();
+    app.repositoryContext.client.close();
     releaseProcessLock();
     process.exit(0);
   };
@@ -271,7 +314,7 @@ export async function main() {
   process.once("SIGTERM", () => void shutdown());
 
   try {
-    await sdk.startWatching({
+    await app.sdk.startWatching({
       onDirectMessage,
       onError: (error) => logger.error("[imessage] watcher error", error),
     });

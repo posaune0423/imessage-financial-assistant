@@ -4,11 +4,11 @@ import { tmpdir } from "node:os";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { createAgentToolRuntime } from "../../src/agents/tools";
-import { createAgentRequestContext } from "../../src/agents/request-context";
-import { createReminderTools } from "../../src/agents/tools/reminder";
-import { createSchedulingTools } from "../../src/agents/tools/scheduling";
-import type { ToolRuntimeConfig } from "../../src/config";
+import { createAgentToolRuntime } from "../../../src/agents/tools";
+import { createAgentRequestContext } from "../../../src/agents/request-context";
+import { createReminderTools } from "../../../src/agents/tools/reminder";
+import { createSchedulingTools } from "../../../src/agents/tools/scheduling";
+import type { ToolRuntimeConfig } from "../../../src/config";
 
 const tempDirs: string[] = [];
 

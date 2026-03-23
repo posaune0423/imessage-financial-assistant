@@ -1,23 +1,23 @@
 <div align="center">
 
-# mastra-imessage-agent
+# imessage-financial-assistant
 
 **A compact iMessage-first personal agent template built with Mastra on macOS.**
 
-[![CI](https://github.com/posaune0423/mastra-imessage-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/posaune0423/mastra-imessage-agent/actions/workflows/ci.yml)
+[![CI](https://github.com/posaune0423/imessage-financial-assistant/actions/workflows/ci.yml/badge.svg)](https://github.com/posaune0423/imessage-financial-assistant/actions/workflows/ci.yml)
 [![Bun](https://img.shields.io/badge/Bun-1.3+-000?logo=bun&logoColor=fff)](https://bun.com)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178C6?logo=typescript&logoColor=fff)](https://www.typescriptlang.org/)
 [![Mastra](https://img.shields.io/badge/Mastra-Agent-111827)](https://mastra.ai)
 [![Anthropic](https://img.shields.io/badge/Anthropic-Claude-D97706)](https://platform.claude.com/docs/en/home)
 [![Brave Search](https://img.shields.io/badge/Brave-Search%20API-F97316)](https://brave.com/search/api/)
 
-[Repository](https://github.com/posaune0423/mastra-imessage-agent) · [Mastra](https://mastra.ai) · [Photon iMessage Kit](https://github.com/photon-hq/imessage-kit)
+[Repository](https://github.com/posaune0423/imessage-financial-assistant) · [Mastra](https://mastra.ai) · [Photon iMessage Kit](https://github.com/photon-hq/imessage-kit)
 
 </div>
 
 ## Overview
 
-`mastra-imessage-agent` is a small, inspectable template for running an AI assistant through iMessage. It listens to direct messages from a configured owner phone number, responds with a Mastra agent, persists conversation memory in SQLite/LibSQL, and can proactively act outside the chat loop through heartbeat, reminder, scheduled-message, and MCP-backed workflows.
+`imessage-financial-assistant` is a small, inspectable template for running an AI assistant through iMessage. It listens to direct messages from a configured owner phone number, responds with a Mastra agent, persists conversation memory in SQLite/LibSQL, and can proactively act outside the chat loop through heartbeat, reminder, scheduled-message, and MCP-backed workflows.
 
 This repository is intentionally narrow in scope: one user, one local macOS runtime, one agent process, and a codebase that is easy to read and modify.
 
@@ -75,8 +75,8 @@ iMessage DM -> IMessageSDK watcher -> Mastra agent -> tools / MCP -> iMessage re
 ## Quick Start
 
 ```bash
-git clone https://github.com/posaune0423/mastra-imessage-agent.git
-cd mastra-imessage-agent
+git clone https://github.com/posaune0423/imessage-financial-assistant.git
+cd imessage-financial-assistant
 bun install
 ```
 

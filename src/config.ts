@@ -55,9 +55,24 @@ export interface McpConfig {
   };
 }
 
+export interface TurnkeyConfig {
+  apiBaseUrl: string;
+  apiPublicKey: string | null;
+  apiPrivateKey: string | null;
+  organizationId: string | null;
+  delegatedKeySecretNamespace: string;
+}
+
+export interface HyperliquidConfig {
+  apiUrl: string;
+  wsUrl: string;
+  signatureChainId: number | null;
+}
+
 export interface AppConfig {
   ownerPhone: string;
   logLevel: typeof env.LOG_LEVEL;
+  multiUserMode: boolean;
   agent: GeneralAgentConfig;
   heartbeat: HeartbeatConfig;
   tools: {
@@ -65,12 +80,15 @@ export interface AppConfig {
     runtime: ToolRuntimeConfig;
   };
   mcp: McpConfig;
+  turnkey: TurnkeyConfig;
+  hyperliquid: HyperliquidConfig;
 }
 
 export function createAppConfig(source = env): AppConfig {
   return {
     ownerPhone: source.OWNER_PHONE,
     logLevel: source.LOG_LEVEL,
+    multiUserMode: source.MULTI_USER_MODE,
     agent: {
       model: source.ANTHROPIC_MODEL,
       maxSteps: AGENT_AUTONOMY_DEFAULTS.maxSteps,
@@ -103,6 +121,18 @@ export function createAppConfig(source = env): AppConfig {
       servers: {
         allium: source.ALLIUM_API_KEY ? { apiKey: source.ALLIUM_API_KEY } : null,
       },
+    },
+    turnkey: {
+      apiBaseUrl: source.TURNKEY_API_BASE_URL,
+      apiPublicKey: source.TURNKEY_API_PUBLIC_KEY ?? null,
+      apiPrivateKey: source.TURNKEY_API_PRIVATE_KEY ?? null,
+      organizationId: source.TURNKEY_ORGANIZATION_ID ?? null,
+      delegatedKeySecretNamespace: source.TURNKEY_DELEGATED_KEY_SECRET_NAMESPACE,
+    },
+    hyperliquid: {
+      apiUrl: source.HYPERLIQUID_API_URL,
+      wsUrl: source.HYPERLIQUID_WS_URL,
+      signatureChainId: source.HYPERLIQUID_SIGNATURE_CHAIN_ID ?? null,
     },
   };
 }

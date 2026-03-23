@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { appConfig } from "../../src/config";
+import { appConfig } from "../../../src/config";
 
 describe("appConfig", () => {
   it("maps env-derived runtime settings into typed config slices", () => {

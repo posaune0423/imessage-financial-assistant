@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { HeartbeatEngine, isHeartbeatActive } from "../../src/agents/heartbeat";
+import { HeartbeatEngine, isHeartbeatActive } from "../../../src/agents/heartbeat";
 
 const heartbeat = {
   intervalMs: 60_000,

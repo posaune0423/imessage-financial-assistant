@@ -1,12 +1,74 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { createAgentRequestContext } from "../../src/agents/request-context";
-import type { AgentToolRuntime } from "../../src/agents/tools";
-import { createAgentTools } from "../../src/agents/tools";
-import { createWebTools } from "../../src/agents/tools/brave";
-import { createIMessageTools } from "../../src/agents/tools/imessage";
-import { createReminderTools } from "../../src/agents/tools/reminder";
-import { createSchedulingTools } from "../../src/agents/tools/scheduling";
+import { createAgentRequestContext } from "../../../src/agents/request-context";
+import type { AgentToolRuntime } from "../../../src/agents/tools";
+import { createAgentTools } from "../../../src/agents/tools";
+import { createWebTools } from "../../../src/agents/tools/brave";
+import { createHyperliquidTools } from "../../../src/agents/tools/hyperliquid";
+import { createIMessageTools } from "../../../src/agents/tools/imessage";
+import { createReminderTools } from "../../../src/agents/tools/reminder";
+import { createSchedulingTools } from "../../../src/agents/tools/scheduling";
+import { createWalletTools } from "../../../src/agents/tools/wallet";
+
+function createFakeServices() {
+  const wallet = {
+    id: "wallet-1",
+    appUserId: "user-1",
+    chain: "ethereum",
+    address: "0x1234567890abcdef1234567890abcdef12345678" as const,
+    status: "ready" as const,
+    turnkeyOrganizationId: "org-1",
+    turnkeyEndUserId: "user-turnkey-1",
+    turnkeyWalletId: "wallet-turnkey-1",
+    turnkeyAccountId: "account-turnkey-1",
+    turnkeyDelegatedUserId: "delegated-1",
+    turnkeyDelegatedKeyRef: "turnkey/delegated/org-1/delegated-1",
+    signerStatus: "ready" as const,
+    provisionedFrom: "phone_number_first_message",
+    createdAt: "2099-03-22T00:00:00.000Z",
+    updatedAt: "2099-03-22T00:00:00.000Z",
+  };
+
+  return {
+    wallets: {
+      getProfile: vi.fn().mockResolvedValue(wallet),
+      ensurePrimaryWallet: vi.fn().mockResolvedValue(wallet),
+    },
+    userContextResolver: {
+      resolve: vi.fn().mockResolvedValue({
+        id: "user-1",
+        resourceKey: "app-user:user-1",
+        sender: "+819012345678",
+        wallet,
+      }),
+    },
+    turnkeyProvisioning: {
+      ensurePrimaryWallet: vi.fn().mockResolvedValue(wallet),
+    },
+    hyperliquid: {
+      getMarketSnapshot: vi.fn().mockResolvedValue({
+        timestamp: "2099-03-22T00:00:00.000Z",
+        assets: [{ coin: "BTC", asset: 0, mid: "95000", szDecimals: 5, maxLeverage: 40 }],
+      }),
+      getUserSummary: vi.fn().mockResolvedValue({
+        address: wallet.address,
+        summary: { marginSummary: { accountValue: "1000" } },
+      }),
+      getOpenOrders: vi.fn().mockResolvedValue({
+        address: wallet.address,
+        orders: [{ oid: 1 }],
+      }),
+      getRecentFills: vi.fn().mockResolvedValue({
+        address: wallet.address,
+        fills: [{ oid: 1 }],
+      }),
+      placeOrder: vi.fn().mockResolvedValue({ ok: true, oid: 1 }),
+      cancelOrder: vi.fn().mockResolvedValue({ ok: true }),
+      modifyOrder: vi.fn().mockResolvedValue({ ok: true }),
+      updateLeverage: vi.fn().mockResolvedValue({ ok: true }),
+    },
+  };
+}
 
 function createFakeRuntime(): AgentToolRuntime {
   const scheduledItems: Array<Record<string, unknown>> = [];
@@ -207,15 +269,28 @@ async function executeTool(
 describe("agent tools", () => {
   it("combines all built-in tool definitions for the agent", () => {
     const runtime = createFakeRuntime();
-    const tools = createAgentTools(runtime, {
-      web: {
-        braveSearch: { apiKey: "brave-test-key" },
+    const services = createFakeServices();
+    const tools = createAgentTools(
+      runtime,
+      {
+        web: {
+          braveSearch: { apiKey: "brave-test-key" },
+        },
       },
-    });
+      services as never,
+    );
 
     expect(Object.keys(tools).toSorted()).toEqual([
       "brave-fetch",
       "brave-search",
+      "hyperliquid_cancel_orders",
+      "hyperliquid_get_market_snapshot",
+      "hyperliquid_get_open_orders",
+      "hyperliquid_get_recent_fills",
+      "hyperliquid_get_user_summary",
+      "hyperliquid_modify_order",
+      "hyperliquid_place_order",
+      "hyperliquid_update_leverage",
       "imessage_cancel_reminder",
       "imessage_cancel_scheduled_message",
       "imessage_get_messages",
@@ -234,6 +309,8 @@ describe("agent tools", () => {
       "imessage_set_reminder_at",
       "imessage_set_reminder_exact",
       "imessage_set_reminder_in",
+      "wallet_ensure_primary",
+      "wallet_get_profile",
     ]);
   });
 
@@ -566,5 +643,62 @@ describe("agent tools", () => {
 
     expect("brave-search" in toolsWithoutBrave).toBe(false);
     expect("brave-fetch" in toolsWithoutBrave).toBe(true);
+  });
+
+  it("returns wallet profile and ensures wallet provisioning from request context", async () => {
+    const services = createFakeServices();
+    const tools = createWalletTools({
+      wallets: services.wallets as never,
+      userContextResolver: services.userContextResolver as never,
+      turnkeyProvisioning: services.turnkeyProvisioning as never,
+    });
+    const requestContext = createAgentRequestContext({
+      sender: "+819012345678",
+      chatId: "chat-1",
+      appUserId: "user-1",
+    });
+
+    await expect(executeTool(tools.wallet_get_profile, {}, requestContext)).resolves.toEqual({
+      status: "ready",
+      signerStatus: "ready",
+      address: "0x1234567890abcdef1234567890abcdef12345678",
+      chain: "ethereum",
+    });
+
+    await expect(executeTool(tools.wallet_ensure_primary, {}, requestContext)).resolves.toEqual({
+      status: "ready",
+      signerStatus: "ready",
+      address: "0x1234567890abcdef1234567890abcdef12345678",
+    });
+  });
+
+  it("requires an explicit confirmation code before Hyperliquid writes execute", async () => {
+    const services = createFakeServices();
+    const tools = createHyperliquidTools({
+      wallets: services.wallets as never,
+      hyperliquid: services.hyperliquid as never,
+    });
+    const requestContext = createAgentRequestContext({
+      sender: "+819012345678",
+      appUserId: "user-1",
+      incomingText: "BTC を 0.01 買って",
+    });
+
+    await expect(
+      executeTool(
+        tools.hyperliquid_place_order,
+        {
+          market: "BTC",
+          side: "buy",
+          size: "0.01",
+          price: "95000",
+        },
+        requestContext,
+      ),
+    ).resolves.toMatchObject({
+      status: "confirmation_required",
+    });
+
+    expect(services.hyperliquid.placeOrder).not.toHaveBeenCalled();
   });
 });
