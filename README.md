@@ -73,4 +73,7 @@ You need macOS, Messages access for Photon, an OpenAI API key, and Turnkey serve
 
 ```bash
 vp check
+bun run test
+bun run test:e2e
+bun run dev
 ```

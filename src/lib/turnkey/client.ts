@@ -6,6 +6,7 @@ import { logger } from "../../utils/logger";
 import {
   generateDelegatedApiKeyPair,
   hasDelegatedApiKeyCredentials,
+  readDelegatedApiKeyCredentials,
   writeDelegatedApiKeyCredentials,
 } from "./delegated-credentials";
 
@@ -107,8 +108,20 @@ function getUserId(user: unknown): string | null {
   return getString(user, "userId");
 }
 
-function getUserIds(response: unknown): string[] {
-  return getArray(response, "userIds").flatMap((value) => (typeof value === "string" && value.trim() ? [value] : []));
+function getPolicyName(policy: unknown): string | null {
+  return getString(policy, "policyName");
+}
+
+function getPolicyEffect(policy: unknown): string | null {
+  return getString(policy, "effect");
+}
+
+function getPolicyCondition(policy: unknown): string | null {
+  return getString(policy, "condition");
+}
+
+function getPolicyConsensus(policy: unknown): string | null {
+  return getString(policy, "consensus");
 }
 
 function formatDebugValue(value: unknown): string {
@@ -199,6 +212,7 @@ export class TurnkeyProvisioningClient implements TurnkeyProvisioningAdapter {
   async provisionSubOrganization(input: { phoneNumber: string; userId: string }): Promise<TurnkeyWalletLinkage> {
     const client = this.sdk.apiClient();
     const createSubOrganization = getTurnkeyMethod(client, "createSubOrganization");
+    const delegatedCredentials = generateDelegatedApiKeyPair();
     const request = {
       subOrganizationName: `imessage-user-${input.userId}`,
       rootQuorumThreshold: 1,
@@ -207,6 +221,18 @@ export class TurnkeyProvisioningClient implements TurnkeyProvisioningAdapter {
           userName: input.phoneNumber,
           userPhoneNumber: input.phoneNumber,
           apiKeys: [],
+          authenticators: [],
+          oauthProviders: [],
+        },
+        {
+          userName: `delegated-signer-${input.userId}`,
+          apiKeys: [
+            {
+              apiKeyName: "Delegated Signer",
+              publicKey: delegatedCredentials.apiPublicKey,
+              curveType: "API_KEY_CURVE_P256",
+            },
+          ],
           authenticators: [],
           oauthProviders: [],
         },
@@ -226,11 +252,22 @@ export class TurnkeyProvisioningClient implements TurnkeyProvisioningAdapter {
     }
 
     const linkage = await this.loadWalletLinkage(organizationId);
-    return this.ensureDelegatedSignerLinkage(linkage);
+    if (!linkage.delegatedUserId) {
+      throw new Error(`Turnkey sub-organization ${organizationId} is missing the delegated signer user`);
+    }
+
+    const delegatedKeyRef = `${this.config.delegatedKeySecretNamespace}/${organizationId}/${linkage.delegatedUserId}`;
+    writeDelegatedApiKeyCredentials(delegatedKeyRef, delegatedCredentials);
+
+    return {
+      ...linkage,
+      delegatedKeyRef,
+    };
   }
 
   async bootstrapDelegatedSigner(linkage: TurnkeyWalletLinkage) {
     const ensuredLinkage = await this.ensureDelegatedSignerLinkage(linkage);
+    await this.ensureDelegatedSignerPolicy(ensuredLinkage);
     return {
       signerStatus: "ready",
       linkage: ensuredLinkage,
@@ -241,110 +278,85 @@ export class TurnkeyProvisioningClient implements TurnkeyProvisioningAdapter {
     if (linkage.delegatedUserId && linkage.delegatedKeyRef && hasDelegatedApiKeyCredentials(linkage.delegatedKeyRef)) {
       return linkage;
     }
-
-    const credentials = generateDelegatedApiKeyPair();
-
     if (!linkage.delegatedUserId) {
-      const delegatedUserId = await this.createDelegatedUser(linkage.organizationId, credentials.apiPublicKey);
-      const delegatedKeyRef = `${this.config.delegatedKeySecretNamespace}/${linkage.organizationId}/${delegatedUserId}`;
-      writeDelegatedApiKeyCredentials(delegatedKeyRef, credentials);
-
-      return {
-        ...linkage,
-        delegatedUserId,
-        delegatedKeyRef,
-      };
+      throw new Error(`Turnkey organization ${linkage.organizationId} is missing a delegated signer user`);
     }
 
-    const delegatedKeyRef =
-      linkage.delegatedKeyRef ??
-      `${this.config.delegatedKeySecretNamespace}/${linkage.organizationId}/${linkage.delegatedUserId}`;
-    await this.attachDelegatedApiKey(linkage.organizationId, linkage.delegatedUserId, credentials.apiPublicKey);
-    writeDelegatedApiKeyCredentials(delegatedKeyRef, credentials);
+    throw new Error(
+      `Delegated signer credentials are missing locally for ${linkage.organizationId}. Re-provision the wallet to recreate the delegated signer cleanly.`,
+    );
+  }
+
+  private async ensureDelegatedSignerPolicy(linkage: TurnkeyWalletLinkage): Promise<void> {
+    if (!linkage.delegatedUserId) {
+      throw new Error(`Turnkey organization ${linkage.organizationId} is missing a delegated user`);
+    }
+    if (!linkage.delegatedKeyRef) {
+      throw new Error(`Turnkey organization ${linkage.organizationId} is missing delegated signer credentials`);
+    }
+
+    const desiredPolicy = this.buildDelegatedSignerPolicy(linkage);
+    const delegatedCredentials = readDelegatedApiKeyCredentials(linkage.delegatedKeyRef);
+    const client = new Turnkey({
+      apiBaseUrl: this.config.apiBaseUrl,
+      apiPublicKey: delegatedCredentials.apiPublicKey,
+      apiPrivateKey: delegatedCredentials.apiPrivateKey,
+      defaultOrganizationId: linkage.organizationId,
+    }).apiClient();
+    const getPolicies = getTurnkeyMethod(client, "getPolicies");
+    const createPolicies = getTurnkeyMethod(client, "createPolicies");
+    const existingPolicies = await this.runTurnkeyRequest(
+      "getPolicies",
+      {
+        organizationId: linkage.organizationId,
+      },
+      async () =>
+        getPolicies({
+          organizationId: linkage.organizationId,
+        }),
+      linkage.organizationId,
+    );
+
+    const hasPolicy = getArray(existingPolicies, "policies").some((policy) => {
+      return (
+        getPolicyName(policy) === desiredPolicy.policyName &&
+        getPolicyEffect(policy) === desiredPolicy.effect &&
+        getPolicyCondition(policy) === desiredPolicy.condition &&
+        getPolicyConsensus(policy) === desiredPolicy.consensus
+      );
+    });
+
+    if (hasPolicy) {
+      return;
+    }
+
+    await this.runTurnkeyRequest(
+      "createPolicies",
+      {
+        organizationId: linkage.organizationId,
+        policies: [desiredPolicy],
+      },
+      async () =>
+        createPolicies({
+          organizationId: linkage.organizationId,
+          policies: [desiredPolicy],
+        }),
+      linkage.organizationId,
+    );
+  }
+
+  private buildDelegatedSignerPolicy(linkage: TurnkeyWalletLinkage) {
+    if (!linkage.delegatedUserId) {
+      throw new Error(`Turnkey organization ${linkage.organizationId} is missing a delegated user`);
+    }
 
     return {
-      ...linkage,
-      delegatedKeyRef,
+      policyName: `Allow delegated signer ${linkage.delegatedUserId} to sign with wallet ${linkage.walletId}`,
+      effect: "EFFECT_ALLOW" as const,
+      consensus: `approvers.any(user, user.id == '${linkage.delegatedUserId}')`,
+      condition: `activity.action == 'SIGN' && wallet.id == '${linkage.walletId}'`,
+      notes: "Allow the backend delegated signer to sign transactions for the user's primary wallet.",
     };
-  }
-
-  private async createDelegatedUser(organizationId: string, publicKey: string): Promise<string> {
-    const client = this.sdk.apiClient();
-    const createApiOnlyUsers = getTurnkeyMethod(client, "createApiOnlyUsers");
-    const response = await this.runTurnkeyRequest(
-      "createApiOnlyUsers",
-      {
-        organizationId,
-        apiOnlyUsers: [
-          {
-            userName: `delegated-signer-${organizationId}`,
-            userTags: [],
-            apiKeys: [
-              {
-                apiKeyName: "Delegated Signer",
-                publicKey,
-                curveType: "API_KEY_CURVE_P256",
-              },
-            ],
-          },
-        ],
-      },
-      async () =>
-        createApiOnlyUsers({
-          organizationId,
-          apiOnlyUsers: [
-            {
-              userName: `delegated-signer-${organizationId}`,
-              userTags: [],
-              apiKeys: [
-                {
-                  apiKeyName: "Delegated Signer",
-                  publicKey,
-                  curveType: "API_KEY_CURVE_P256",
-                },
-              ],
-            },
-          ],
-        }),
-    );
-
-    const delegatedUserId = getUserIds(response)[0];
-    if (!delegatedUserId) {
-      throw new Error(`Turnkey organization ${organizationId} did not return a delegated userId`);
-    }
-
-    return delegatedUserId;
-  }
-
-  private async attachDelegatedApiKey(organizationId: string, userId: string, publicKey: string): Promise<void> {
-    const client = this.sdk.apiClient();
-    const createApiKeys = getTurnkeyMethod(client, "createApiKeys");
-    await this.runTurnkeyRequest(
-      "createApiKeys",
-      {
-        organizationId,
-        userId,
-        apiKeys: [
-          {
-            apiKeyName: "Delegated Signer",
-            publicKey,
-            curveType: "API_KEY_CURVE_P256",
-          },
-        ],
-      },
-      async () =>
-        createApiKeys({
-          organizationId,
-          userId,
-          apiKeys: [
-            {
-              apiKeyName: "Delegated Signer",
-              publicKey,
-              curveType: "API_KEY_CURVE_P256",
-            },
-          ],
-        }),
-    );
   }
 
   private async loadWalletLinkage(organizationId: string): Promise<TurnkeyWalletLinkage> {
@@ -415,7 +427,12 @@ export class TurnkeyProvisioningClient implements TurnkeyProvisioningAdapter {
     };
   }
 
-  private async runTurnkeyRequest<T>(operationName: string, input: unknown, operation: () => Promise<T>): Promise<T> {
+  private async runTurnkeyRequest<T>(
+    operationName: string,
+    input: unknown,
+    operation: () => Promise<T>,
+    organizationId = this.config.organizationId,
+  ): Promise<T> {
     logger.debug(`[turnkey] -> ${operationName} input=${formatDebugValue(input)}`);
 
     try {
@@ -426,7 +443,7 @@ export class TurnkeyProvisioningClient implements TurnkeyProvisioningAdapter {
       logger.debug(
         `[turnkey] !! ${operationName} error=${formatDebugValue(error instanceof Error ? error.message : error)}`,
       );
-      throw formatTurnkeyConfigurationError(this.config.organizationId, error);
+      throw formatTurnkeyConfigurationError(organizationId, error);
     }
   }
 }

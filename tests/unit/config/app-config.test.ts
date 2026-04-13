@@ -7,8 +7,8 @@ describe("appConfig", () => {
   it("maps env-derived runtime settings into typed config slices", () => {
     expect(appConfig.ownerPhone).toBe("+819012345678");
     expect(appConfig.agent.model).toBe("openai/gpt-5.4-mini");
-    expect(appConfig.agent.maxSteps).toBe(5);
-    expect(appConfig.agent.maxOutputTokens).toBe(1_024);
+    expect(appConfig.agent.maxSteps).toBe(10);
+    expect(appConfig.agent.maxOutputTokens).toBe(2_048);
     expect(appConfig.agent.memory.databaseUrl).toBe("file:./data/test-agent.db");
     expect(appConfig.agent.memory.lastMessages).toBe(4);
     expect(appConfig.agent.memory.observationalMemory.enabled).toBe(false);

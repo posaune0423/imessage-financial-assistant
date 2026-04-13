@@ -33,12 +33,16 @@ export function createAgentTools(
   const walletTools = createWalletTools({
     wallets: services.wallets,
     userContextResolver: services.userContextResolver,
-    turnkeyProvisioning: services.turnkeyProvisioning,
   });
-  const hyperliquidTools = createHyperliquidTools({
-    wallets: services.wallets,
-    hyperliquid: services.hyperliquid,
-  });
+  const hyperliquidTools = createHyperliquidTools(
+    {
+      wallets: services.wallets,
+      hyperliquid: services.hyperliquid,
+    },
+    {
+      includeGenericPassthrough: scope === "full",
+    },
+  );
   const messagingTools = {
     ...createIMessageTools(runtime),
     ...createSchedulingTools(runtime),

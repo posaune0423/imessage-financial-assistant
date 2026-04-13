@@ -22,6 +22,7 @@
 - Wallet and identity state live in the app DB, not in prompts.
 - Turnkey server credentials are required at startup.
 - Hyperliquid writes are confirmation-gated and never executed on ambiguous approval.
+- The local Hyperliquid adapter exposes broad `InfoClient` reads plus the installed `ExchangeClient` action surface through Mastra tools.
 - MCP toolsets are loaded lazily for onchain / wallet / crypto-heavy requests rather than attached to every request.
 
 ## Runtime Flow
@@ -29,7 +30,7 @@
 ### Inbound message flow
 
 1. Photon emits an inbound direct message.
-2. `src/main.ts` resolves the sender into an user.
+2. `src/main.ts` resolves the sender into an user and keeps `chatId` only as reply-routing context.
 3. Turnkey provisioning runs if the user has no ready primary wallet.
 4. Request context is assembled with user and wallet metadata.
 5. The Mastra agent runs with per-user memory and built-in tools.
@@ -38,9 +39,9 @@
 ### Trading flow
 
 1. The user asks for a Hyperliquid action.
-2. The relevant write tool computes a deterministic confirmation code.
-3. The tool returns `status=confirmation_required` until the exact code appears in the inbound message.
-4. After confirmation, the tool signs through the Turnkey-backed wallet runtime and submits to Hyperliquid.
+2. The agent picks either a first-class Hyperliquid tool or a generic Hyperliquid SDK passthrough tool.
+3. The tool prepares the Turnkey-backed signer path and returns a confirmation code on the first call.
+4. Hyperliquid writes execute only after the user replies with the exact confirmation code.
 
 ## Source of Truth Rules
 

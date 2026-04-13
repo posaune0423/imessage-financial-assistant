@@ -8,7 +8,7 @@
 - Let a user interact with Hyperliquid through plain-text iMessage
 - Hide wallet provisioning complexity behind a stable user layer
 - Keep one agent runtime while still supporting multiple users
-- Make signed actions explicit through confirmation codes
+- Execute signed Hyperliquid actions directly once the agent has resolved the request
 - Keep the app DB as the source of truth for user and wallet state
 
 ## System Topology
@@ -50,8 +50,8 @@ graph TB
 
 ### 2. User resolution
 
-- `UserContextResolver` maps `sender` and `chatId` to a stable user.
-- The app persists messaging identities and generates a stable `resourceKey`.
+- `UserContextResolver` maps the normalized `sender` identity to a stable user and keeps `chatId` only for reply routing.
+- The app persists sender identities and generates a stable `resourceKey`.
 - Mastra memory is keyed by that `resourceKey`, not by raw phone formatting.
 
 ### 3. Wallet readiness
@@ -107,16 +107,16 @@ Hyperliquid is responsible for:
 
 The Hyperliquid service sits behind `src/lib/hyperliquid/service.ts`, so agent tools do not need to know SDK construction details.
 
-### Confirmation-gated writes
+### Direct writes
 
 All signed Hyperliquid actions follow the same shape:
 
-1. the tool derives a deterministic confirmation code from the requested action
-2. the tool returns `confirmation_required` with a compact summary
-3. the user sends the exact code back in iMessage
-4. only then does the tool submit the action
+1. the tool resolves the Turnkey-backed signer for the current user
+2. the first tool call returns an exact confirmation code for the requested action
+3. the tool submits the Hyperliquid action only after the user replies with that exact code
+4. the assistant reports the resulting success or failure directly in iMessage
 
-This keeps the execution model safe enough for a plain-text chat interface.
+The safety boundary lives in both Turnkey signer configuration and the app-enforced confirmation-code gate for signed writes.
 
 ## Tool Surface
 

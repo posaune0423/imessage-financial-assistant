@@ -1,6 +1,7 @@
 import { ApiKeyStamper } from "@turnkey/sdk-server";
 import { TurnkeyClient } from "@turnkey/http";
 import { createAccount } from "@turnkey/viem";
+import { getAddress } from "viem";
 
 import type { TurnkeyConfig } from "../../config";
 import type { AppWallet } from "../../domain/users/types";
@@ -11,11 +12,12 @@ export class TurnkeyViemAccountFactory implements TurnkeySignerClientFactory {
   constructor(private readonly config: TurnkeyConfig) {}
 
   async createSignerClient(wallet: AppWallet) {
-    if (!wallet.turnkeyOrganizationId || !wallet.turnkeyAccountId || !wallet.turnkeyDelegatedKeyRef) {
+    if (!wallet.turnkeyOrganizationId || !wallet.turnkeyDelegatedKeyRef || !wallet.address) {
       throw new Error("Wallet is missing Turnkey linkage");
     }
 
     const delegatedCredentials = readDelegatedApiKeyCredentials(wallet.turnkeyDelegatedKeyRef);
+    const ethereumAddress = getAddress(wallet.address);
 
     const client = new TurnkeyClient(
       {
@@ -30,8 +32,8 @@ export class TurnkeyViemAccountFactory implements TurnkeySignerClientFactory {
     return createAccount({
       client,
       organizationId: wallet.turnkeyOrganizationId,
-      signWith: wallet.turnkeyAccountId,
-      ethereumAddress: wallet.address ?? undefined,
+      signWith: ethereumAddress,
+      ethereumAddress,
     });
   }
 }

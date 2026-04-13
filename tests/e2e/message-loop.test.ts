@@ -94,10 +94,12 @@ describe("message loop", () => {
     expect(requestContext?.get("ownerPhone")).toBe(ownerPhone);
     expect(requestContext?.get("userId")).toBe("user-1");
     expect(requestContext?.get("resourceKey")).toBe("user:user-1");
+    expect(requestContext?.get("agentScope")).toBe("core");
+    expect(requestContext?.get("hyperliquidNetwork")).toBe("mainnet");
     expect(sendMessage).toHaveBeenCalledWith("+819012345678", "Understood.");
   });
 
-  it("sends wallet addresses as standalone messages so they are easy to copy", async () => {
+  it("keeps wallet addresses in one readable reply", async () => {
     const generate = vi.fn().mockResolvedValue({
       text: "Wallet address: 0x1234567890abcdef1234567890abcdef12345678\nFund it with USDC on Arbitrum.",
     });
@@ -115,9 +117,11 @@ describe("message loop", () => {
 
     await handler({ sender: "+819012345678", text: "show my wallet address" });
 
-    expect(sendMessage).toHaveBeenNthCalledWith(1, "+819012345678", "Wallet address:");
-    expect(sendMessage).toHaveBeenNthCalledWith(2, "+819012345678", "0x1234567890abcdef1234567890abcdef12345678");
-    expect(sendMessage).toHaveBeenNthCalledWith(3, "+819012345678", "Fund it with USDC on Arbitrum.");
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(sendMessage).toHaveBeenCalledWith(
+      "+819012345678",
+      "Wallet address: 0x1234567890abcdef1234567890abcdef12345678\nFund it with USDC on Arbitrum.",
+    );
   });
 
   it("uses chatId as the conversation key and reply target when available", async () => {
@@ -431,16 +435,13 @@ describe("message loop", () => {
 
     expect(ensurePrimaryWallet).toHaveBeenCalledTimes(1);
     expect(generate).not.toHaveBeenCalled();
+    expect(sendMessage).toHaveBeenCalledTimes(1);
     expect(sendMessage).toHaveBeenNthCalledWith(
       1,
       "+819012345678",
-      ["Your wallet is ready.", "Deposit address:"].join("\n"),
-    );
-    expect(sendMessage).toHaveBeenNthCalledWith(2, "+819012345678", "0x1234567890abcdef1234567890abcdef12345678");
-    expect(sendMessage).toHaveBeenNthCalledWith(
-      3,
-      "+819012345678",
       [
+        "Your wallet is ready.",
+        "Deposit address: 0x1234567890abcdef1234567890abcdef12345678",
         "Please deposit USDC to this address. Arbitrum is the default funding route.",
         'After funding, you can say things like "show my portfolio", "show BTC market data", or "buy 0.01 BTC".',
       ].join("\n"),
@@ -476,16 +477,13 @@ describe("message loop", () => {
 
     expect(ensurePrimaryWallet).toHaveBeenCalledTimes(1);
     expect(generate).not.toHaveBeenCalled();
+    expect(sendMessage).toHaveBeenCalledTimes(1);
     expect(sendMessage).toHaveBeenNthCalledWith(
       1,
       "+819012345678",
-      ["Your wallet is ready.", "Deposit address:"].join("\n"),
-    );
-    expect(sendMessage).toHaveBeenNthCalledWith(2, "+819012345678", "0x1234567890abcdef1234567890abcdef12345678");
-    expect(sendMessage).toHaveBeenNthCalledWith(
-      3,
-      "+819012345678",
       [
+        "Your wallet is ready.",
+        "Deposit address: 0x1234567890abcdef1234567890abcdef12345678",
         "Please deposit USDC to this address. Hyperliquid testnet is the target network.",
         'After funding, you can say things like "show my portfolio", "show BTC market data", or "buy 0.01 BTC".',
       ].join("\n"),
@@ -506,6 +504,8 @@ describe("direct message helpers", () => {
 
   it("selects a smaller agent scope from the request intent", () => {
     expect(selectAgentScope("show my wallet balance")).toBe("core");
+    expect(selectAgentScope("search Hyperliquid spot markets for HYPE")).toBe("core");
+    expect(selectAgentScope("set a stop loss on BTC")).toBe("core");
     expect(selectAgentScope("remind me tomorrow at 9")).toBe("messaging");
     expect(selectAgentScope("buy BTC and remind me to check fills later")).toBe("full");
   });

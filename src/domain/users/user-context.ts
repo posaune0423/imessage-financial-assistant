@@ -30,15 +30,10 @@ function createIdentityRecord(
 
 function buildIdentityCandidates(message: IncomingUserMessage): Array<MessagingIdentity> {
   const sender = message.sender?.trim();
-  const chatId = message.chatId?.trim();
   const identities: Array<MessagingIdentity> = [];
 
   if (sender) {
     identities.push(createIdentityRecord("", normalizePhone(sender), "phone_number"));
-  }
-
-  if (chatId) {
-    identities.push(createIdentityRecord("", chatId, "chat_id"));
   }
 
   return identities;

@@ -14,8 +14,8 @@ const HYPERLIQUID_ENDPOINTS = {
 } as const satisfies Record<HyperliquidNetwork, { apiUrl: string; wsUrl: string }>;
 
 const AGENT_AUTONOMY_DEFAULTS = {
-  maxSteps: 5,
-  maxOutputTokens: 1_024,
+  maxSteps: 10,
+  maxOutputTokens: 2_048,
   observationalMemory: {
     enabled: false,
   },

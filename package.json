@@ -4,7 +4,7 @@
   "type": "module",
   "module": "src/main.ts",
   "scripts": {
-    "dev": "bun --hot run src/main.ts",
+    "dev": "bun run src/main.ts",
     "start": "bun run src/main.ts",
     "test:script": "bun run scripts/send-message.ts",
     "test": "vp test run",

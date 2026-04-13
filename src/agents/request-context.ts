@@ -1,4 +1,8 @@
 import { RequestContext } from "@mastra/core/request-context";
+import { z } from "zod";
+
+export const AGENT_SCOPE_VALUES = ["core", "messaging", "full"] as const;
+export const HYPERLIQUID_NETWORK_VALUES = ["mainnet", "testnet"] as const;
 
 export interface AgentRequestContextValues {
   sender?: string;
@@ -15,7 +19,31 @@ export interface AgentRequestContextValues {
   turnkeyWalletId?: string;
   turnkeyAccountId?: string;
   turnkeyDelegatedUserId?: string;
+  agentScope?: (typeof AGENT_SCOPE_VALUES)[number];
+  hyperliquidNetwork?: (typeof HYPERLIQUID_NETWORK_VALUES)[number];
 }
+
+export const agentRequestContextSchema = z.object({
+  sender: z.string().optional(),
+  chatId: z.string().optional(),
+  ownerPhone: z.string().optional(),
+  isHeartbeat: z.boolean().optional(),
+  incomingText: z.string().optional(),
+  userId: z.string().optional(),
+  resourceKey: z.string().optional(),
+  walletAddress: z
+    .string()
+    .regex(/^0x[a-fA-F0-9]{40}$/)
+    .optional(),
+  walletStatus: z.enum(["none", "provisioning", "ready", "failed"]).optional(),
+  signerStatus: z.enum(["not_bootstrapped", "bootstrapping", "ready", "degraded"]).optional(),
+  turnkeyOrganizationId: z.string().optional(),
+  turnkeyWalletId: z.string().optional(),
+  turnkeyAccountId: z.string().optional(),
+  turnkeyDelegatedUserId: z.string().optional(),
+  agentScope: z.enum(AGENT_SCOPE_VALUES).optional(),
+  hyperliquidNetwork: z.enum(HYPERLIQUID_NETWORK_VALUES).optional(),
+});
 
 const SELF_RECIPIENT_ALIASES = new Set([
   "me",
@@ -118,6 +146,14 @@ export function createAgentRequestContext(values: AgentRequestContextValues) {
   const turnkeyDelegatedUserId = cleanValue(values.turnkeyDelegatedUserId);
   if (turnkeyDelegatedUserId) {
     requestContext.set("turnkeyDelegatedUserId", turnkeyDelegatedUserId);
+  }
+
+  if (values.agentScope) {
+    requestContext.set("agentScope", values.agentScope);
+  }
+
+  if (values.hyperliquidNetwork) {
+    requestContext.set("hyperliquidNetwork", values.hyperliquidNetwork);
   }
 
   return requestContext;

@@ -81,12 +81,11 @@ interface DirectMessageHandlerDeps {
 const MCP_KEYWORD_PATTERN =
   /\b(allium|wallet|onchain|on-chain|blockchain|crypto|token|defi|dex|swap|bridge|ethereum|solana|bitcoin|btc|eth|usdc|contract|address|transaction|balance|holder|pool|liquidity)\b/i;
 const FINANCE_KEYWORD_PATTERN =
-  /\b(wallet|portfolio|balance|balances|market|markets|price|prices|trade|trading|order|orders|buy|sell|position|positions|pnl|hyperliquid|btc|eth|usdc|token|tokens|defi)\b/i;
+  /\b(wallet|portfolio|balance|balances|market|markets|search|browse|price|prices|trade|trading|order|orders|book|candle|candles|buy|sell|position|positions|pnl|hyperliquid|btc|eth|usdc|token|tokens|spot|perp|perps|leverage|margin|twap|stop loss|stop-loss|take profit|take-profit|tp|sl|withdraw|transfer|send asset|vault|sub-account|subaccount|validator|staking|borrow|lend)\b/i;
 const MESSAGING_KEYWORD_PATTERN =
   /\b(remind|reminder|schedule|scheduled|send|text|message|messages|later|tomorrow|tonight|daily|weekly|every day|every week|follow up|follow-up|notify)\b/i;
 const HYPERLIQUID_BALANCE_KEYWORD_PATTERN =
   /\b(balance|balances|portfolio|holdings|wallet|position|positions|pnl|net worth|worth|usdc)\b/i;
-const ETHEREUM_ADDRESS_PATTERN = /\b0x[a-fA-F0-9]{40}\b/g;
 const TOOL_PROGRESS_REPLY = "I am checking that now. Please wait a moment.";
 const LOG_VALUE_LIMIT = 400;
 const WORKING_MEMORY_TOOL_NAME = "updateWorkingMemory";
@@ -112,57 +111,8 @@ function createFirstWalletOnboardingReply(wallet: AppWallet | null, network: Hyp
 }
 
 function splitReplyIntoMessages(text: string): string[] {
-  const messages: string[] = [];
-  let buffer: string[] = [];
-
-  const flushBuffer = () => {
-    const message = buffer.join("\n").trim();
-    if (message) {
-      messages.push(message);
-    }
-    buffer = [];
-  };
-
-  for (const rawLine of text.split("\n")) {
-    const line = rawLine.trim();
-    if (!line) {
-      if (buffer.length > 0 && buffer[buffer.length - 1] !== "") {
-        buffer.push("");
-      }
-      continue;
-    }
-
-    ETHEREUM_ADDRESS_PATTERN.lastIndex = 0;
-    const matches = [...line.matchAll(ETHEREUM_ADDRESS_PATTERN)];
-    if (matches.length === 0) {
-      buffer.push(line);
-      continue;
-    }
-
-    let cursor = 0;
-    for (const match of matches) {
-      const address = match[0];
-      const index = match.index ?? 0;
-      const before = line.slice(cursor, index).trim();
-      if (before) {
-        buffer.push(before);
-        flushBuffer();
-      } else {
-        flushBuffer();
-      }
-
-      messages.push(address);
-      cursor = index + address.length;
-    }
-
-    const after = line.slice(cursor).trim();
-    if (after) {
-      buffer.push(after);
-    }
-  }
-
-  flushBuffer();
-  return messages;
+  const message = text.trim();
+  return message ? [message] : [];
 }
 
 async function sendIMessageSafeReply(
@@ -339,6 +289,7 @@ export function createDirectMessageHandler(deps: DirectMessageHandlerDeps) {
         chatId: message.chatId,
         text,
       });
+      const agentScope = selectAgentScope(text);
       const requestContext = createAgentRequestContext({
         sender,
         chatId: message.chatId ?? undefined,
@@ -353,6 +304,8 @@ export function createDirectMessageHandler(deps: DirectMessageHandlerDeps) {
         turnkeyWalletId: freshUserContext.wallet?.turnkeyWalletId ?? undefined,
         turnkeyAccountId: freshUserContext.wallet?.turnkeyAccountId ?? undefined,
         turnkeyDelegatedUserId: freshUserContext.wallet?.turnkeyDelegatedUserId ?? undefined,
+        agentScope,
+        hyperliquidNetwork: deps.hyperliquidNetwork,
       });
 
       if (isFirstWalletProvision) {
@@ -361,7 +314,6 @@ export function createDirectMessageHandler(deps: DirectMessageHandlerDeps) {
         return;
       }
 
-      const agentScope = selectAgentScope(text);
       const toolsets = shouldResolveMcpToolsetsForNetwork(text, deps.hyperliquidNetwork)
         ? await deps.resolveToolsets?.(text)
         : undefined;

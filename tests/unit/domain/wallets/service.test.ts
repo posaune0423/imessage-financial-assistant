@@ -29,6 +29,11 @@ const readyWallet = {
   updatedAt: "2099-03-22T00:00:00.000Z",
 };
 
+const degradedSignerWallet = {
+  ...readyWallet,
+  signerStatus: "degraded" as const,
+};
+
 function createWalletRepository(wallet: AppWallet | null = readyWallet): WalletRepository {
   return {
     findPrimaryWalletByUserId: vi.fn().mockResolvedValue(wallet),
@@ -61,6 +66,17 @@ describe("WalletService", () => {
     expect(provisioning.ensurePrimaryWallet).toHaveBeenCalledWith(userContext, { force: true });
   });
 
+  it("reprovisions when the wallet exists but the signer is degraded", async () => {
+    const wallets = createWalletRepository(degradedSignerWallet);
+    const provisioning = {
+      ensurePrimaryWallet: vi.fn().mockResolvedValue(readyWallet),
+    };
+    const service = new WalletService(wallets, provisioning as never);
+
+    await expect(service.ensurePrimaryWallet(userContext)).resolves.toEqual(readyWallet);
+    expect(provisioning.ensurePrimaryWallet).toHaveBeenCalledWith(userContext, { force: true });
+  });
+
   it("provisions when the current wallet is missing", async () => {
     const wallets = createWalletRepository(null);
     const provisioning = {
@@ -69,6 +85,6 @@ describe("WalletService", () => {
     const service = new WalletService(wallets, provisioning as never);
 
     await expect(service.ensurePrimaryWallet(userContext)).resolves.toEqual(readyWallet);
-    expect(provisioning.ensurePrimaryWallet).toHaveBeenCalledWith(userContext, { force: false });
+    expect(provisioning.ensurePrimaryWallet).toHaveBeenCalledWith(userContext, { force: true });
   });
 });

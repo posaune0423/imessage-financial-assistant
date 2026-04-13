@@ -8,7 +8,14 @@ export interface TurnkeyDelegatedApiKeyCredentials {
   apiPrivateKey: string;
 }
 
-const DELEGATED_KEY_STORE_ROOT = fileURLToPath(new URL("../../../data/turnkey-delegated-keys", import.meta.url));
+const DEFAULT_DELEGATED_KEY_STORE_ROOT = fileURLToPath(
+  new URL("../../../data/turnkey-delegated-keys", import.meta.url),
+);
+
+function getDelegatedKeyStoreRoot(): string {
+  const override = process.env.TURNKEY_DELEGATED_KEY_STORE_ROOT?.trim();
+  return override ? override : DEFAULT_DELEGATED_KEY_STORE_ROOT;
+}
 
 function toKeySegments(keyRef: string): string[] {
   const segments = keyRef.split("/").filter(Boolean);
@@ -20,7 +27,7 @@ function toKeySegments(keyRef: string): string[] {
 }
 
 function getCredentialPath(keyRef: string): string {
-  return join(DELEGATED_KEY_STORE_ROOT, ...toKeySegments(keyRef)) + ".json";
+  return join(getDelegatedKeyStoreRoot(), ...toKeySegments(keyRef)) + ".json";
 }
 
 function isDelegatedApiKeyCredentials(value: unknown): value is TurnkeyDelegatedApiKeyCredentials {

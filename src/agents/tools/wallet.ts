@@ -4,12 +4,10 @@ import { z } from "zod";
 import { getUserId } from "../request-context";
 import type { WalletService } from "../../domain/wallets/service";
 import type { UserContextResolver } from "../../domain/users/user-context";
-import type { TurnkeyProvisioningService } from "../../lib/turnkey/provisioning";
 
 interface WalletToolDeps {
   wallets: WalletService;
   userContextResolver: UserContextResolver;
-  turnkeyProvisioning: TurnkeyProvisioningService;
 }
 
 export function createWalletTools(deps: WalletToolDeps) {
@@ -58,7 +56,7 @@ export function createWalletTools(deps: WalletToolDeps) {
           sender,
           chatId: typeof chatId === "string" ? chatId : undefined,
         });
-        const wallet = await deps.turnkeyProvisioning.ensurePrimaryWallet(userContext, { force });
+        const wallet = await deps.wallets.ensurePrimaryWallet(userContext, force === true);
         const status =
           wallet.status === "ready"
             ? ("ready" as const)

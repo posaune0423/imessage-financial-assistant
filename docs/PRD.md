@@ -57,12 +57,12 @@ This product collapses those steps into a single iMessage conversation while kee
 ## Core User Journey
 
 1. A user sends a direct message in iMessage.
-2. The app resolves `sender` and `chatId` into a stable user.
+2. The app resolves the `sender` into a stable user and keeps `chatId` as conversation routing context.
 3. If the user has no primary wallet, the app provisions one through Turnkey.
 4. The Mastra agent receives the request with the user's wallet and resource context.
 5. For market or account reads, the agent responds with the relevant Hyperliquid data.
-6. For signed actions, the agent returns a compact execution summary and a deterministic confirmation code.
-7. The action is submitted only after the user sends the explicit confirmation code.
+6. For signed actions, the agent prepares the action through the local Turnkey signer path and requires an explicit confirmation code before execution.
+7. The chat UX uses an exact `confirm <code>` round trip before any Hyperliquid write is submitted.
 
 ## P0 Requirements
 
@@ -75,7 +75,7 @@ This product collapses those steps into a single iMessage conversation while kee
 ### 2. Stable user identity resolution
 
 - every inbound request resolves to an user before agent execution
-- the app supports multiple users by mapping `sender` / `chatId` to a stable `resourceKey`
+- the app supports multiple users by mapping normalized `sender` identities to stable `resourceKey` values while using `chatId` only for conversation routing
 
 ### 3. Automatic Turnkey wallet provisioning
 
@@ -85,8 +85,9 @@ This product collapses those steps into a single iMessage conversation while kee
 
 ### 4. Hyperliquid read access
 
-- the agent can inspect market snapshots
-- the agent can inspect the current user's account summary, open orders, and recent fills
+- the agent can browse and search perp and spot markets
+- the agent can inspect market snapshots, order books, candles, and order status
+- the agent can inspect the current user's account summary, open orders, historical orders, and recent fills
 
 ### 5. Hyperliquid write access with confirmation gating
 
@@ -94,7 +95,10 @@ This product collapses those steps into a single iMessage conversation while kee
 - cancel order
 - modify order
 - update leverage
-- every write action requires an explicit confirmation code in chat
+- submit stop loss / take profit and TWAP actions
+- transfer assets and initiate withdrawals
+- access the broader installed Hyperliquid exchange action surface through Mastra tools
+- Hyperliquid write actions require an exact confirmation-code step in chat before execution
 
 ### 6. Per-user memory
 
@@ -122,6 +126,7 @@ This product collapses those steps into a single iMessage conversation while kee
 - the same user is resolved to the same user and wallet context across later messages
 - Hyperliquid read requests return data grounded in tools rather than guessed responses
 - Hyperliquid write requests never execute on vague confirmation such as "ok" or "yes"
+- supported Hyperliquid market, transfer, and trading requests do not fall back to generic "not available here" replies
 - docs and implementation both describe the repository as a trading agent, not as a generic assistant template
 
 ## Reference

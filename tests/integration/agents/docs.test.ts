@@ -12,6 +12,10 @@ describe("agent markdown files", () => {
     expect(soul).toContain("IMESSAGE-SAFE TEXT ONLY");
     expect(soul).toContain("Markdown emphasis such as **bold**");
     expect(soul).toContain("They can lead short sections or status lines");
+    expect(soul).toContain("browse/search");
+    expect(soul).toContain("generic Hyperliquid InfoClient or ExchangeClient tool");
+    expect(soul).toContain("Never dump raw API payloads");
+    expect(soul).toContain("returns an explorer URL");
   });
 
   it("loads HEARTBEAT.md from src/agents", () => {

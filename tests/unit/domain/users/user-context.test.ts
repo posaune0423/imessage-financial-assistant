@@ -59,7 +59,7 @@ function createFakeRepositories() {
 }
 
 describe("UserContextResolver", () => {
-  it("creates a new user with stable resource key and binds sender/chat identities", async () => {
+  it("creates a new user with stable resource key and binds the sender identity", async () => {
     const repos = createFakeRepositories();
     const resolver = new UserContextResolver(repos.users, repos.wallets);
 
@@ -71,8 +71,8 @@ describe("UserContextResolver", () => {
 
     expect(context.sender).toBe("+819012345678");
     expect(context.resourceKey).toMatch(/^user:/);
-    expect(repos.identities).toHaveLength(2);
-    expect(repos.identities.map((item) => item.identity).toSorted()).toEqual(["+819012345678", "chat-1"]);
+    expect(repos.identities).toHaveLength(1);
+    expect(repos.identities.map((item) => item.identity)).toEqual(["+819012345678"]);
   });
 
   it("reuses the same user when the sender identity already exists", async () => {
@@ -91,6 +91,26 @@ describe("UserContextResolver", () => {
 
     expect(second.id).toBe(first.id);
     expect(second.resourceKey).toBe(first.resourceKey);
-    expect(repos.identities.map((item) => item.identity).toSorted()).toEqual(["+819012345678", "chat-2"]);
+    expect(repos.identities.map((item) => item.identity)).toEqual(["+819012345678"]);
+  });
+
+  it("does not merge different senders that share the same group chat id", async () => {
+    const repos = createFakeRepositories();
+    const resolver = new UserContextResolver(repos.users, repos.wallets);
+
+    const first = await resolver.resolve({
+      sender: "+819012345678",
+      chatId: "group-1",
+      text: "first",
+    });
+    const second = await resolver.resolve({
+      sender: "+819099988877",
+      chatId: "group-1",
+      text: "second",
+    });
+
+    expect(second.id).not.toBe(first.id);
+    expect(second.resourceKey).not.toBe(first.resourceKey);
+    expect(repos.identities.map((item) => item.identity).toSorted()).toEqual(["+819012345678", "+819099988877"]);
   });
 });

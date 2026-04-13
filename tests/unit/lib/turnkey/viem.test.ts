@@ -1,46 +1,65 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { rmSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { writeDelegatedApiKeyCredentials } from "../../../../src/lib/turnkey/delegated-credentials";
+function createMocks() {
+  return {
+    turnkeyHttp: {
+      TurnkeyClient: vi.fn(),
+    },
+    turnkeyViem: {
+      createAccount: vi.fn(async () => ({ address: "0x1234567890abcdef1234567890abcdef12345678" })),
+    },
+    sdkServer: {
+      ApiKeyStamper: vi.fn(),
+    },
+    delegatedCredentials: {
+      readDelegatedApiKeyCredentials: vi.fn(() => ({
+        apiPublicKey: "delegated-public",
+        apiPrivateKey: "delegated-private",
+      })),
+    },
+  };
+}
 
-const turnkeyHttpMocks = vi.hoisted(() => ({
-  TurnkeyClient: vi.fn(),
-}));
+const mocksKey = "__turnkeyViemAccountFactoryMocks";
+const mocks =
+  (
+    globalThis as typeof globalThis & {
+      [mocksKey]?: ReturnType<typeof createMocks>;
+    }
+  )[mocksKey] ?? createMocks();
 
-const turnkeyViemMocks = vi.hoisted(() => ({
-  createAccount: vi.fn(async () => ({ address: "0x1234567890abcdef1234567890abcdef12345678" })),
-}));
-
-const sdkServerMocks = vi.hoisted(() => ({
-  ApiKeyStamper: vi.fn(),
-}));
+(
+  globalThis as typeof globalThis & {
+    [mocksKey]?: ReturnType<typeof createMocks>;
+  }
+)[mocksKey] = mocks;
 
 vi.mock("@turnkey/http", () => ({
-  TurnkeyClient: turnkeyHttpMocks.TurnkeyClient,
+  TurnkeyClient: mocks.turnkeyHttp.TurnkeyClient,
 }));
 
 vi.mock("@turnkey/viem", () => ({
-  createAccount: turnkeyViemMocks.createAccount,
+  createAccount: mocks.turnkeyViem.createAccount,
 }));
 
 vi.mock("@turnkey/sdk-server", () => ({
-  ApiKeyStamper: sdkServerMocks.ApiKeyStamper,
+  ApiKeyStamper: mocks.sdkServer.ApiKeyStamper,
 }));
 
-const delegatedKeyStoreRoot = fileURLToPath(new URL("../../../../data/turnkey-delegated-keys", import.meta.url));
+vi.mock("../../../../src/lib/turnkey/delegated-credentials", () => ({
+  readDelegatedApiKeyCredentials: mocks.delegatedCredentials.readDelegatedApiKeyCredentials,
+}));
 
 describe("TurnkeyViemAccountFactory", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    rmSync(delegatedKeyStoreRoot, { recursive: true, force: true });
-    sdkServerMocks.ApiKeyStamper.mockImplementation(function ApiKeyStamperMock(
+    mocks.sdkServer.ApiKeyStamper.mockImplementation(function ApiKeyStamperMock(
       this: { config: unknown },
       config: unknown,
     ) {
       this.config = config;
     });
-    turnkeyHttpMocks.TurnkeyClient.mockImplementation(function TurnkeyClientMock(
+    mocks.turnkeyHttp.TurnkeyClient.mockImplementation(function TurnkeyClientMock(
       this: { config: unknown; stamper: unknown },
       config: unknown,
       stamper: unknown,
@@ -48,17 +67,13 @@ describe("TurnkeyViemAccountFactory", () => {
       this.config = config;
       this.stamper = stamper;
     });
-  });
-
-  afterEach(() => {
-    rmSync(delegatedKeyStoreRoot, { recursive: true, force: true });
-  });
-
-  it("builds the viem signer with delegated API key credentials instead of the root key", async () => {
-    writeDelegatedApiKeyCredentials("turnkey/delegated/org-1/delegated-1", {
+    mocks.delegatedCredentials.readDelegatedApiKeyCredentials.mockReturnValue({
       apiPublicKey: "delegated-public",
       apiPrivateKey: "delegated-private",
     });
+  });
+
+  it("builds the viem signer with delegated API key credentials and signs with the canonical Ethereum address", async () => {
     const { TurnkeyViemAccountFactory } = await import("../../../../src/lib/turnkey/viem");
     const factory = new TurnkeyViemAccountFactory({
       apiBaseUrl: "https://api.turnkey.com",
@@ -86,14 +101,18 @@ describe("TurnkeyViemAccountFactory", () => {
       updatedAt: "2099-01-01T00:00:00.000Z",
     });
 
-    expect(sdkServerMocks.ApiKeyStamper).toHaveBeenCalledWith({
+    expect(mocks.delegatedCredentials.readDelegatedApiKeyCredentials).toHaveBeenCalledWith(
+      "turnkey/delegated/org-1/delegated-1",
+    );
+    expect(mocks.sdkServer.ApiKeyStamper).toHaveBeenCalledWith({
       apiPublicKey: "delegated-public",
       apiPrivateKey: "delegated-private",
     });
-    expect(turnkeyViemMocks.createAccount).toHaveBeenCalledWith(
+    expect(mocks.turnkeyViem.createAccount).toHaveBeenCalledWith(
       expect.objectContaining({
         organizationId: "org-1",
-        signWith: "account-1",
+        signWith: "0x1234567890AbcdEF1234567890aBcdef12345678",
+        ethereumAddress: "0x1234567890AbcdEF1234567890aBcdef12345678",
       }),
     );
   });
