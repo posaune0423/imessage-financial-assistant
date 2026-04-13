@@ -5,7 +5,9 @@ import {
   createDirectMessageHandler,
   createSchedulingLifecycleLogger,
   getDirectMessageFailureReply,
+  selectAgentScope,
   shouldResolveMcpToolsets,
+  shouldResolveMcpToolsetsForNetwork,
 } from "../../src/main";
 import { logger } from "../../src/utils/logger";
 
@@ -48,17 +50,22 @@ function createHandlerDeps(overrides?: {
   };
 }
 
+function createSelectAgent(generate: ReturnType<typeof vi.fn>) {
+  return vi.fn(() => ({ generate }) as never);
+}
+
 describe("message loop", () => {
   const ownerPhone = "+819012345678";
 
   it("routes a normal direct message through the agent with user resource keys", async () => {
     const generate = vi.fn().mockResolvedValue({ text: "Understood." });
+    const selectAgent = createSelectAgent(generate);
     const sendMessage = vi.fn();
     const resolveToolsets = vi.fn().mockResolvedValue({});
     const deps = createHandlerDeps();
     const handler = createDirectMessageHandler({
       ownerPhone,
-      agent: { generate } as never,
+      selectAgent,
       sendMessage,
       userContextResolver: deps.userContextResolver as never,
       turnkeyProvisioning: deps.turnkeyProvisioning as never,
@@ -70,6 +77,7 @@ describe("message loop", () => {
     await handler({ sender: "+819012345678", text: "hello" });
 
     expect(resolveToolsets).not.toHaveBeenCalled();
+    expect(selectAgent).toHaveBeenCalledWith("hello");
     expect(generate).toHaveBeenCalledWith(
       "hello",
       expect.objectContaining({
@@ -97,7 +105,7 @@ describe("message loop", () => {
     const deps = createHandlerDeps();
     const handler = createDirectMessageHandler({
       ownerPhone,
-      agent: { generate } as never,
+      selectAgent: createSelectAgent(generate),
       sendMessage,
       userContextResolver: deps.userContextResolver as never,
       turnkeyProvisioning: deps.turnkeyProvisioning as never,
@@ -118,7 +126,7 @@ describe("message loop", () => {
     const deps = createHandlerDeps();
     const handler = createDirectMessageHandler({
       ownerPhone,
-      agent: { generate } as never,
+      selectAgent: createSelectAgent(generate),
       sendMessage,
       userContextResolver: deps.userContextResolver as never,
       turnkeyProvisioning: deps.turnkeyProvisioning as never,
@@ -145,7 +153,7 @@ describe("message loop", () => {
     });
     const handler = createDirectMessageHandler({
       ownerPhone,
-      agent: { generate } as never,
+      selectAgent: createSelectAgent(generate),
       sendMessage,
       userContextResolver: deps.userContextResolver as never,
       turnkeyProvisioning: deps.turnkeyProvisioning as never,
@@ -161,12 +169,13 @@ describe("message loop", () => {
 
   it("resolves MCP toolsets only for likely MCP-heavy requests", async () => {
     const generate = vi.fn().mockResolvedValue({ text: "Checking balances." });
+    const selectAgent = createSelectAgent(generate);
     const sendMessage = vi.fn();
     const resolveToolsets = vi.fn().mockResolvedValue({ allium: {} });
     const deps = createHandlerDeps();
     const handler = createDirectMessageHandler({
       ownerPhone,
-      agent: { generate } as never,
+      selectAgent,
       sendMessage,
       userContextResolver: deps.userContextResolver as never,
       turnkeyProvisioning: deps.turnkeyProvisioning as never,
@@ -178,6 +187,8 @@ describe("message loop", () => {
     await handler({ sender: "+819012345678", text: "wallet balanceを見て" });
 
     expect(resolveToolsets).toHaveBeenCalledTimes(1);
+    expect(resolveToolsets).toHaveBeenCalledWith("wallet balanceを見て");
+    expect(selectAgent).toHaveBeenCalledWith("wallet balanceを見て");
     expect(generate).toHaveBeenCalledWith(
       "wallet balanceを見て",
       expect.objectContaining({
@@ -190,13 +201,40 @@ describe("message loop", () => {
     );
   });
 
+  it("skips MCP balance toolsets for Hyperliquid testnet balance requests", async () => {
+    const generate = vi.fn().mockResolvedValue({ text: "Checking balances." });
+    const sendMessage = vi.fn();
+    const resolveToolsets = vi.fn().mockResolvedValue({ allium: {} });
+    const deps = createHandlerDeps();
+    const handler = createDirectMessageHandler({
+      ownerPhone,
+      selectAgent: createSelectAgent(generate),
+      sendMessage,
+      userContextResolver: deps.userContextResolver as never,
+      turnkeyProvisioning: deps.turnkeyProvisioning as never,
+      hyperliquidNetwork: "testnet",
+      resolveToolsets,
+      maxSteps: 3,
+    });
+
+    await handler({ sender: "+819012345678", text: "please check my wallet balance" });
+
+    expect(resolveToolsets).not.toHaveBeenCalled();
+    expect(generate).toHaveBeenCalledWith(
+      "please check my wallet balance",
+      expect.objectContaining({
+        toolsets: undefined,
+      }),
+    );
+  });
+
   it("routes scheduling requests through the agent instead of bypassing it", async () => {
     const generate = vi.fn().mockResolvedValue({ text: "I set a reminder for tomorrow at 9:00." });
     const sendMessage = vi.fn();
     const deps = createHandlerDeps();
     const handler = createDirectMessageHandler({
       ownerPhone,
-      agent: { generate } as never,
+      selectAgent: createSelectAgent(generate),
       sendMessage,
       userContextResolver: deps.userContextResolver as never,
       turnkeyProvisioning: deps.turnkeyProvisioning as never,
@@ -240,7 +278,7 @@ describe("message loop", () => {
     const deps = createHandlerDeps();
     const handler = createDirectMessageHandler({
       ownerPhone,
-      agent: { generate } as never,
+      selectAgent: createSelectAgent(generate),
       sendMessage,
       userContextResolver: deps.userContextResolver as never,
       turnkeyProvisioning: deps.turnkeyProvisioning as never,
@@ -283,7 +321,7 @@ describe("message loop", () => {
     const deps = createHandlerDeps();
     const handler = createDirectMessageHandler({
       ownerPhone,
-      agent: { generate } as never,
+      selectAgent: createSelectAgent(generate),
       sendMessage,
       userContextResolver: deps.userContextResolver as never,
       turnkeyProvisioning: deps.turnkeyProvisioning as never,
@@ -323,7 +361,7 @@ describe("message loop", () => {
     });
     const handler = createDirectMessageHandler({
       ownerPhone,
-      agent: { generate } as never,
+      selectAgent: createSelectAgent(generate),
       sendMessage,
       userContextResolver: deps.userContextResolver as never,
       turnkeyProvisioning: deps.turnkeyProvisioning as never,
@@ -348,7 +386,7 @@ describe("message loop", () => {
     const deps = createHandlerDeps();
     const handler = createDirectMessageHandler({
       ownerPhone,
-      agent: { generate } as never,
+      selectAgent: createSelectAgent(generate),
       sendMessage,
       userContextResolver: deps.userContextResolver as never,
       turnkeyProvisioning: deps.turnkeyProvisioning as never,
@@ -381,7 +419,7 @@ describe("message loop", () => {
     });
     const handler = createDirectMessageHandler({
       ownerPhone,
-      agent: { generate } as never,
+      selectAgent: createSelectAgent(generate),
       sendMessage,
       userContextResolver: deps.userContextResolver as never,
       turnkeyProvisioning: deps.turnkeyProvisioning as never,
@@ -409,8 +447,8 @@ describe("message loop", () => {
     );
   });
 
-  it("returns testnet-safe onboarding instructions when Hyperliquid testnet mode is enabled", async () => {
-    const generate = vi.fn().mockResolvedValue({ text: "Your testnet wallet is ready." });
+  it("returns the same onboarding structure in testnet mode and only changes the network hint", async () => {
+    const generate = vi.fn().mockResolvedValue({ text: "Your wallet is ready." });
     const sendMessage = vi.fn();
     const resolve = vi
       .fn()
@@ -426,7 +464,7 @@ describe("message loop", () => {
     });
     const handler = createDirectMessageHandler({
       ownerPhone,
-      agent: { generate } as never,
+      selectAgent: createSelectAgent(generate),
       sendMessage,
       userContextResolver: deps.userContextResolver as never,
       turnkeyProvisioning: deps.turnkeyProvisioning as never,
@@ -441,15 +479,14 @@ describe("message loop", () => {
     expect(sendMessage).toHaveBeenNthCalledWith(
       1,
       "+819012345678",
-      ["Your testnet wallet is ready.", "Deposit address:"].join("\n"),
+      ["Your wallet is ready.", "Deposit address:"].join("\n"),
     );
     expect(sendMessage).toHaveBeenNthCalledWith(2, "+819012345678", "0x1234567890abcdef1234567890abcdef12345678");
     expect(sendMessage).toHaveBeenNthCalledWith(
       3,
       "+819012345678",
       [
-        "Fund this wallet with testnet USDC before trading on Hyperliquid testnet.",
-        "If you need testnet funds, use the Hyperliquid testnet faucet at https://app.hyperliquid-testnet.xyz/drip.",
+        "Please deposit USDC to this address. Hyperliquid testnet is the target network.",
         'After funding, you can say things like "show my portfolio", "show BTC market data", or "buy 0.01 BTC".',
       ].join("\n"),
     );
@@ -460,6 +497,17 @@ describe("direct message helpers", () => {
   it("detects likely MCP requests from the message text", () => {
     expect(shouldResolveMcpToolsets("wallet balanceを見て")).toBe(true);
     expect(shouldResolveMcpToolsets("hello")).toBe(false);
+  });
+
+  it("disables MCP balance lookup on Hyperliquid testnet", () => {
+    expect(shouldResolveMcpToolsetsForNetwork("show my wallet balance", "testnet")).toBe(false);
+    expect(shouldResolveMcpToolsetsForNetwork("show my wallet balance", "mainnet")).toBe(true);
+  });
+
+  it("selects a smaller agent scope from the request intent", () => {
+    expect(selectAgentScope("show my wallet balance")).toBe("core");
+    expect(selectAgentScope("remind me tomorrow at 9")).toBe("messaging");
+    expect(selectAgentScope("buy BTC and remind me to check fills later")).toBe("full");
   });
 
   it("creates a retry message for rate limits", () => {

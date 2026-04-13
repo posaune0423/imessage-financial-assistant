@@ -32,6 +32,7 @@ export interface HyperliquidLeverageInput {
 
 export interface HyperliquidUserFacingService {
   getMarketSnapshot(coins?: string[]): Promise<unknown>;
+  getSpotBalance(address: `0x${string}`): Promise<unknown>;
   getUserSummary(address: `0x${string}`): Promise<unknown>;
   getOpenOrders(address: `0x${string}`): Promise<unknown>;
   getRecentFills(address: `0x${string}`, limit?: number): Promise<unknown>;

@@ -3,6 +3,11 @@ import { Turnkey } from "@turnkey/sdk-server";
 import type { TurnkeyConfig } from "../../config";
 import type { TurnkeyProvisioningAdapter, TurnkeyWalletLinkage } from "./interfaces";
 import { logger } from "../../utils/logger";
+import {
+  generateDelegatedApiKeyPair,
+  hasDelegatedApiKeyCredentials,
+  writeDelegatedApiKeyCredentials,
+} from "./delegated-credentials";
 
 const DEFAULT_ETHEREUM_ACCOUNT = {
   curve: "CURVE_SECP256K1",
@@ -100,6 +105,10 @@ function getUserPhoneNumber(user: unknown): string | null {
 
 function getUserId(user: unknown): string | null {
   return getString(user, "userId");
+}
+
+function getUserIds(response: unknown): string[] {
+  return getArray(response, "userIds").flatMap((value) => (typeof value === "string" && value.trim() ? [value] : []));
 }
 
 function formatDebugValue(value: unknown): string {
@@ -216,13 +225,126 @@ export class TurnkeyProvisioningClient implements TurnkeyProvisioningAdapter {
       throw new Error("Turnkey createSubOrganization did not return a subOrganizationId");
     }
 
-    return this.loadWalletLinkage(organizationId);
+    const linkage = await this.loadWalletLinkage(organizationId);
+    return this.ensureDelegatedSignerLinkage(linkage);
   }
 
   async bootstrapDelegatedSigner(linkage: TurnkeyWalletLinkage) {
+    const ensuredLinkage = await this.ensureDelegatedSignerLinkage(linkage);
     return {
-      signerStatus: linkage.delegatedUserId ? "ready" : "degraded",
+      signerStatus: "ready",
+      linkage: ensuredLinkage,
     } as const;
+  }
+
+  private async ensureDelegatedSignerLinkage(linkage: TurnkeyWalletLinkage): Promise<TurnkeyWalletLinkage> {
+    if (linkage.delegatedUserId && linkage.delegatedKeyRef && hasDelegatedApiKeyCredentials(linkage.delegatedKeyRef)) {
+      return linkage;
+    }
+
+    const credentials = generateDelegatedApiKeyPair();
+
+    if (!linkage.delegatedUserId) {
+      const delegatedUserId = await this.createDelegatedUser(linkage.organizationId, credentials.apiPublicKey);
+      const delegatedKeyRef = `${this.config.delegatedKeySecretNamespace}/${linkage.organizationId}/${delegatedUserId}`;
+      writeDelegatedApiKeyCredentials(delegatedKeyRef, credentials);
+
+      return {
+        ...linkage,
+        delegatedUserId,
+        delegatedKeyRef,
+      };
+    }
+
+    const delegatedKeyRef =
+      linkage.delegatedKeyRef ??
+      `${this.config.delegatedKeySecretNamespace}/${linkage.organizationId}/${linkage.delegatedUserId}`;
+    await this.attachDelegatedApiKey(linkage.organizationId, linkage.delegatedUserId, credentials.apiPublicKey);
+    writeDelegatedApiKeyCredentials(delegatedKeyRef, credentials);
+
+    return {
+      ...linkage,
+      delegatedKeyRef,
+    };
+  }
+
+  private async createDelegatedUser(organizationId: string, publicKey: string): Promise<string> {
+    const client = this.sdk.apiClient();
+    const createApiOnlyUsers = getTurnkeyMethod(client, "createApiOnlyUsers");
+    const response = await this.runTurnkeyRequest(
+      "createApiOnlyUsers",
+      {
+        organizationId,
+        apiOnlyUsers: [
+          {
+            userName: `delegated-signer-${organizationId}`,
+            userTags: [],
+            apiKeys: [
+              {
+                apiKeyName: "Delegated Signer",
+                publicKey,
+                curveType: "API_KEY_CURVE_P256",
+              },
+            ],
+          },
+        ],
+      },
+      async () =>
+        createApiOnlyUsers({
+          organizationId,
+          apiOnlyUsers: [
+            {
+              userName: `delegated-signer-${organizationId}`,
+              userTags: [],
+              apiKeys: [
+                {
+                  apiKeyName: "Delegated Signer",
+                  publicKey,
+                  curveType: "API_KEY_CURVE_P256",
+                },
+              ],
+            },
+          ],
+        }),
+    );
+
+    const delegatedUserId = getUserIds(response)[0];
+    if (!delegatedUserId) {
+      throw new Error(`Turnkey organization ${organizationId} did not return a delegated userId`);
+    }
+
+    return delegatedUserId;
+  }
+
+  private async attachDelegatedApiKey(organizationId: string, userId: string, publicKey: string): Promise<void> {
+    const client = this.sdk.apiClient();
+    const createApiKeys = getTurnkeyMethod(client, "createApiKeys");
+    await this.runTurnkeyRequest(
+      "createApiKeys",
+      {
+        organizationId,
+        userId,
+        apiKeys: [
+          {
+            apiKeyName: "Delegated Signer",
+            publicKey,
+            curveType: "API_KEY_CURVE_P256",
+          },
+        ],
+      },
+      async () =>
+        createApiKeys({
+          organizationId,
+          userId,
+          apiKeys: [
+            {
+              apiKeyName: "Delegated Signer",
+              publicKey,
+              curveType: "API_KEY_CURVE_P256",
+            },
+          ],
+        }),
+    );
   }
 
   private async loadWalletLinkage(organizationId: string): Promise<TurnkeyWalletLinkage> {

@@ -56,6 +56,21 @@ function createFakeServices() {
         address: wallet.address,
         summary: { marginSummary: { accountValue: "1000" } },
       }),
+      getSpotBalance: vi.fn().mockResolvedValue({
+        network: "mainnet",
+        address: wallet.address,
+        token: { index: 0, symbol: "USDC", decimals: 8 },
+        balance: {
+          raw: "100000000",
+          formatted: "1",
+          heldRaw: "0",
+          heldFormatted: "0",
+          availableRaw: "100000000",
+          availableFormatted: "1",
+          entryNtlRaw: "0",
+          entryNtlFormatted: "0",
+        },
+      }),
       getOpenOrders: vi.fn().mockResolvedValue({
         network: "mainnet",
         address: wallet.address,
@@ -291,6 +306,7 @@ describe("agent tools", () => {
       "hyperliquid_get_market_snapshot",
       "hyperliquid_get_open_orders",
       "hyperliquid_get_recent_fills",
+      "hyperliquid_get_spot_balance",
       "hyperliquid_get_user_summary",
       "hyperliquid_modify_order",
       "hyperliquid_place_order",
@@ -316,6 +332,46 @@ describe("agent tools", () => {
       "wallet_ensure_primary",
       "wallet_get_profile",
     ]);
+  });
+
+  it("builds a smaller core tool scope for finance requests", () => {
+    const runtime = createFakeRuntime();
+    const services = createFakeServices();
+    const tools = createAgentTools(
+      runtime,
+      {
+        web: {
+          braveSearch: { apiKey: "brave-test-key" },
+        },
+      },
+      services as never,
+      "core",
+    );
+
+    expect(Object.keys(tools)).toContain("wallet_get_profile");
+    expect(Object.keys(tools)).toContain("hyperliquid_get_market_snapshot");
+    expect(Object.keys(tools)).not.toContain("imessage_send_message");
+    expect(Object.keys(tools)).not.toContain("imessage_set_reminder_in");
+  });
+
+  it("builds a messaging-only tool scope for scheduling requests", () => {
+    const runtime = createFakeRuntime();
+    const services = createFakeServices();
+    const tools = createAgentTools(
+      runtime,
+      {
+        web: {
+          braveSearch: { apiKey: "brave-test-key" },
+        },
+      },
+      services as never,
+      "messaging",
+    );
+
+    expect(Object.keys(tools)).toContain("imessage_send_message");
+    expect(Object.keys(tools)).toContain("imessage_set_reminder_in");
+    expect(Object.keys(tools)).not.toContain("wallet_get_profile");
+    expect(Object.keys(tools)).not.toContain("hyperliquid_get_market_snapshot");
   });
 
   it("executes all iMessage tools successfully", async () => {
@@ -673,6 +729,34 @@ describe("agent tools", () => {
       status: "ready",
       signerStatus: "ready",
       address: "0x1234567890abcdef1234567890abcdef12345678",
+    });
+  });
+
+  it("returns Hyperliquid spot USDC balance for the current wallet", async () => {
+    const services = createFakeServices();
+    const tools = createHyperliquidTools({
+      wallets: services.wallets as never,
+      hyperliquid: services.hyperliquid as never,
+    });
+    const requestContext = createAgentRequestContext({
+      sender: "+819012345678",
+      userId: "user-1",
+    });
+
+    await expect(executeTool(tools.hyperliquid_get_spot_balance, {}, requestContext)).resolves.toEqual({
+      network: "mainnet",
+      address: "0x1234567890abcdef1234567890abcdef12345678",
+      token: { index: 0, symbol: "USDC", decimals: 8 },
+      balance: {
+        raw: "100000000",
+        formatted: "1",
+        heldRaw: "0",
+        heldFormatted: "0",
+        availableRaw: "100000000",
+        availableFormatted: "1",
+        entryNtlRaw: "0",
+        entryNtlFormatted: "0",
+      },
     });
   });
 

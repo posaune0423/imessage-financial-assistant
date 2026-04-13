@@ -54,7 +54,7 @@
 
 These variables are required for normal startup:
 
-- `ANTHROPIC_API_KEY`
+- `OPENAI_API_KEY`
 - `OWNER_PHONE`
 - `TURNKEY_ORGANIZATION_ID`
 - `TURNKEY_API_BASE_URL`

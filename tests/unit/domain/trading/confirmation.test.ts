@@ -20,6 +20,8 @@ describe("trade confirmation helpers", () => {
 
     expect(containsTradeConfirmation(`confirm ${code}`, code)).toBe(true);
     expect(containsTradeConfirmation(`execute ${code}`, code)).toBe(true);
+    expect(containsTradeConfirmation(`don't confirm ${code}`, code)).toBe(false);
+    expect(containsTradeConfirmation(`please execute ${code}`, code)).toBe(false);
     expect(containsTradeConfirmation("yes", code)).toBe(false);
     expect(containsTradeConfirmation(undefined, code)).toBe(false);
   });

@@ -1,4 +1,5 @@
 import { ExchangeClient, HttpTransport, InfoClient } from "@nktkas/hyperliquid";
+import { createPublicClient, decodeAbiParameters, encodeAbiParameters, formatUnits, http } from "viem";
 
 import type { HyperliquidConfig } from "../../config";
 import type { AppWallet } from "../../domain/users/types";
@@ -19,9 +20,20 @@ interface AssetMeta {
   maxLeverage: number;
 }
 
+const HYPEREVM_RPC_URLS = {
+  mainnet: "https://rpc.hyperliquid.xyz/evm",
+  testnet: "https://rpc.hyperliquid-testnet.xyz/evm",
+} as const satisfies Record<HyperliquidConfig["network"], string>;
+
+const SPOT_BALANCE_PRECOMPILE_ADDRESS = "0x0000000000000000000000000000000000000801";
+const HYPERLIQUID_USDC_TOKEN_INDEX = 0n;
+const HYPERLIQUID_USDC_DECIMALS = 8;
+const HYPERLIQUID_USDC_SYMBOL = "USDC";
+
 export class HyperliquidService implements HyperliquidUserFacingService {
   private readonly transport: HttpTransport;
   private readonly infoClient: InfoClient;
+  private readonly publicClient;
   private universeCache: Map<string, AssetMeta> | null = null;
   private readonly network: HyperliquidConfig["network"];
 
@@ -34,10 +46,15 @@ export class HyperliquidService implements HyperliquidUserFacingService {
       isTestnet: config.isTestnet,
       apiUrl: config.apiUrl,
     });
+    this.publicClient = createPublicClient({
+      transport: http(HYPEREVM_RPC_URLS[config.network]),
+    });
     this.infoClient = new InfoClient({
       transport: this.transport,
     });
-    logger.debug(`[hyperliquid] initialized network=${config.network} apiUrl=${config.apiUrl}`);
+    logger.debug(
+      `[hyperliquid] initialized network=${config.network} apiUrl=${config.apiUrl} rpcUrl=${HYPEREVM_RPC_URLS[config.network]}`,
+    );
   }
 
   async getMarketSnapshot(coins?: string[]) {
@@ -58,6 +75,41 @@ export class HyperliquidService implements HyperliquidUserFacingService {
       network: this.network,
       timestamp: new Date().toISOString(),
       assets,
+    };
+  }
+
+  async getSpotBalance(address: `0x${string}`) {
+    logger.debug(
+      `[hyperliquid] getSpotBalance network=${this.network} address=${address} token=${HYPERLIQUID_USDC_SYMBOL}`,
+    );
+    const result = await this.publicClient.call({
+      to: SPOT_BALANCE_PRECOMPILE_ADDRESS,
+      data: encodeAbiParameters([{ type: "address" }, { type: "uint64" }], [address, HYPERLIQUID_USDC_TOKEN_INDEX]),
+    });
+    const [total, hold, entryNtl] = decodeAbiParameters(
+      [{ type: "uint64" }, { type: "uint64" }, { type: "uint64" }],
+      result.data ?? "0x",
+    );
+    const available = total - hold;
+
+    return {
+      network: this.network,
+      address,
+      token: {
+        index: Number(HYPERLIQUID_USDC_TOKEN_INDEX),
+        symbol: HYPERLIQUID_USDC_SYMBOL,
+        decimals: HYPERLIQUID_USDC_DECIMALS,
+      },
+      balance: {
+        raw: total.toString(),
+        formatted: formatUnits(total, HYPERLIQUID_USDC_DECIMALS),
+        heldRaw: hold.toString(),
+        heldFormatted: formatUnits(hold, HYPERLIQUID_USDC_DECIMALS),
+        availableRaw: available.toString(),
+        availableFormatted: formatUnits(available, HYPERLIQUID_USDC_DECIMALS),
+        entryNtlRaw: entryNtl.toString(),
+        entryNtlFormatted: formatUnits(entryNtl, HYPERLIQUID_USDC_DECIMALS),
+      },
     };
   }
 

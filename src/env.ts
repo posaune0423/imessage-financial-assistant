@@ -3,8 +3,8 @@ import { z } from "zod";
 
 export const env = createEnv({
   server: {
-    ANTHROPIC_API_KEY: z.string().min(1),
-    ANTHROPIC_MODEL: z.string().default("anthropic/claude-haiku-4-5"),
+    OPENAI_API_KEY: z.string().min(1),
+    OPENAI_MODEL: z.string().default("openai/gpt-5.4-mini"),
     OWNER_PHONE: z.string().min(1),
 
     HEARTBEAT_INTERVAL_MS: z.coerce.number().default(60 * 60 * 1000),

@@ -30,6 +30,27 @@ vi.mock("@mastra/mcp", () => {
                 echoed: message,
               }),
             }),
+            realtime_latest_token_balances: createTool({
+              id: "realtime_latest_token_balances",
+              description: "Latest balances",
+              inputSchema: z.object({}),
+              outputSchema: z.object({ ok: z.boolean() }),
+              execute: async () => ({ ok: true }),
+            }),
+            realtime_token_latest_price: createTool({
+              id: "realtime_token_latest_price",
+              description: "Latest token price",
+              inputSchema: z.object({}),
+              outputSchema: z.object({ ok: z.boolean() }),
+              execute: async () => ({ ok: true }),
+            }),
+            realtime_transactions: createTool({
+              id: "realtime_transactions",
+              description: "Transactions",
+              inputSchema: z.object({}),
+              outputSchema: z.object({ ok: z.boolean() }),
+              execute: async () => ({ ok: true }),
+            }),
           },
         },
         errors: {},
@@ -90,5 +111,21 @@ describe("createMcpRuntime", () => {
     });
 
     await expect(runtime.getToolsets()).resolves.toEqual({});
+  });
+
+  it("filters Allium tools by request intent", async () => {
+    const { createMcpRuntime } = await import("../../../src/agents/mcp");
+    const runtime = createMcpRuntime({
+      timeoutMs: 1_000,
+      servers: {
+        allium: { apiKey: "allium-test-key" },
+      },
+    });
+
+    const toolsets = await runtime.getToolsetsForText("show my wallet balance");
+    const toolIds = Object.keys(toolsets.allium ?? {});
+
+    expect(toolIds).toContain("realtime_latest_token_balances");
+    expect(toolIds).not.toContain("echo");
   });
 });

@@ -69,7 +69,7 @@ This product collapses those steps into a single iMessage conversation while kee
 ### 1. iMessage as the primary interface
 
 - inbound messages come from Photon on macOS
-- the agent replies in iMessage-safe text with simple inline emphasis allowed when it materially improves readability
+- the agent replies in iMessage-safe plain text with line breaks and purposeful emoji for scanability, but without Markdown styling
 - the system supports normal direct-message interaction without a separate web app
 
 ### 2. Stable user identity resolution

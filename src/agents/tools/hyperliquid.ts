@@ -97,6 +97,43 @@ export function createHyperliquidTools(deps: HyperliquidToolDeps) {
       }),
       execute: async ({ coins }) => deps.hyperliquid.getMarketSnapshot(coins),
     }),
+    hyperliquid_get_spot_balance: createTool({
+      id: "hyperliquid_get_spot_balance",
+      description:
+        "Get the current Hyperliquid spot USDC balance for the current wallet or an explicit address using HyperEVM RPC. Use this first for wallet balance or USDC balance questions, especially on testnet.",
+      inputSchema: z.object({
+        address: z.string().startsWith("0x").optional(),
+      }),
+      outputSchema: z.object({
+        network: z.enum(["mainnet", "testnet"]),
+        address: z.string(),
+        token: z.object({
+          index: z.number().int().nonnegative(),
+          symbol: z.string(),
+          decimals: z.number().int().nonnegative(),
+        }),
+        balance: z.object({
+          raw: z.string(),
+          formatted: z.string(),
+          heldRaw: z.string(),
+          heldFormatted: z.string(),
+          availableRaw: z.string(),
+          availableFormatted: z.string(),
+          entryNtlRaw: z.string(),
+          entryNtlFormatted: z.string(),
+        }),
+      }),
+      execute: async ({ address }, context) => {
+        const userId = getUserId(context.requestContext);
+        const wallet = await deps.wallets.getProfile(userId);
+        const target = resolveTargetAddress(address ?? wallet?.address);
+        if (!target) {
+          throw new Error("No wallet address is available for this user");
+        }
+
+        return deps.hyperliquid.getSpotBalance(target);
+      },
+    }),
     hyperliquid_get_user_summary: createTool({
       id: "hyperliquid_get_user_summary",
       description: "Get Hyperliquid user summary for the current wallet or an explicit address.",

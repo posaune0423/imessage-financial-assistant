@@ -14,6 +14,8 @@ import { createWalletTools } from "./wallet";
 import { createHyperliquidTools } from "./hyperliquid";
 import type { ToolRuntimeConfig, WebToolConfig } from "../../config";
 
+export type AgentToolScope = "core" | "messaging" | "full";
+
 export interface AgentToolServices {
   wallets: WalletService;
   userContextResolver: UserContextResolver;
@@ -25,21 +27,44 @@ export function createAgentTools(
   runtime: AgentToolRuntime,
   config: { web: WebToolConfig },
   services: AgentToolServices,
+  scope: AgentToolScope = "full",
 ): ToolsInput {
-  return {
-    ...createWebTools(config.web),
+  const webTools = createWebTools(config.web);
+  const walletTools = createWalletTools({
+    wallets: services.wallets,
+    userContextResolver: services.userContextResolver,
+    turnkeyProvisioning: services.turnkeyProvisioning,
+  });
+  const hyperliquidTools = createHyperliquidTools({
+    wallets: services.wallets,
+    hyperliquid: services.hyperliquid,
+  });
+  const messagingTools = {
     ...createIMessageTools(runtime),
     ...createSchedulingTools(runtime),
     ...createReminderTools(runtime),
-    ...createWalletTools({
-      wallets: services.wallets,
-      userContextResolver: services.userContextResolver,
-      turnkeyProvisioning: services.turnkeyProvisioning,
-    }),
-    ...createHyperliquidTools({
-      wallets: services.wallets,
-      hyperliquid: services.hyperliquid,
-    }),
+  };
+
+  if (scope === "core") {
+    return {
+      ...webTools,
+      ...walletTools,
+      ...hyperliquidTools,
+    };
+  }
+
+  if (scope === "messaging") {
+    return {
+      ...webTools,
+      ...messagingTools,
+    };
+  }
+
+  return {
+    ...webTools,
+    ...messagingTools,
+    ...walletTools,
+    ...hyperliquidTools,
   };
 }
 

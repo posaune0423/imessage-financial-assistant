@@ -3,6 +3,7 @@ import type { ToolsetsInput } from "@mastra/core/agent";
 
 import { HeartbeatEngine } from "./agents/heartbeat";
 import { createAgentRequestContext } from "./agents/request-context";
+import type { AgentToolScope } from "./agents/tools";
 import { buildAppContainer } from "./di";
 import type { HyperliquidNetwork } from "./config";
 import type { UserContextResolver } from "./domain/users/user-context";
@@ -41,36 +42,50 @@ interface StepLike {
 }
 
 function isStepLike(step: unknown): step is StepLike {
-  return typeof step === "object" && step !== null;
+  if (typeof step !== "object" || step === null) {
+    return false;
+  }
+  return (
+    (!("toolCalls" in step) || Array.isArray(Reflect.get(step, "toolCalls"))) &&
+    (!("toolResults" in step) || Array.isArray(Reflect.get(step, "toolResults")))
+  );
+}
+
+interface AgentLike {
+  generate: (
+    message: string,
+    options: {
+      memory: {
+        resource: string;
+        thread: string;
+      };
+      maxSteps?: number;
+      toolsets?: ToolsetsInput;
+      requestContext?: ReturnType<typeof createAgentRequestContext>;
+      onStepFinish?: (step: unknown) => Promise<void>;
+    },
+  ) => Promise<{ text: string }>;
 }
 
 interface DirectMessageHandlerDeps {
   ownerPhone: string;
-  agent: {
-    generate: (
-      message: string,
-      options: {
-        memory: {
-          resource: string;
-          thread: string;
-        };
-        maxSteps?: number;
-        toolsets?: ToolsetsInput;
-        requestContext?: ReturnType<typeof createAgentRequestContext>;
-        onStepFinish?: (step: unknown) => Promise<void>;
-      },
-    ) => Promise<{ text: string }>;
-  };
+  selectAgent: (text: string) => AgentLike;
   sendMessage: (to: string, text: string) => Promise<unknown>;
   userContextResolver: UserContextResolver;
   turnkeyProvisioning: TurnkeyProvisioningService;
   hyperliquidNetwork: HyperliquidNetwork;
-  resolveToolsets?: () => Promise<ToolsetsInput>;
+  resolveToolsets?: (text: string) => Promise<ToolsetsInput>;
   maxSteps?: number;
 }
 
 const MCP_KEYWORD_PATTERN =
   /\b(allium|wallet|onchain|on-chain|blockchain|crypto|token|defi|dex|swap|bridge|ethereum|solana|bitcoin|btc|eth|usdc|contract|address|transaction|balance|holder|pool|liquidity)\b/i;
+const FINANCE_KEYWORD_PATTERN =
+  /\b(wallet|portfolio|balance|balances|market|markets|price|prices|trade|trading|order|orders|buy|sell|position|positions|pnl|hyperliquid|btc|eth|usdc|token|tokens|defi)\b/i;
+const MESSAGING_KEYWORD_PATTERN =
+  /\b(remind|reminder|schedule|scheduled|send|text|message|messages|later|tomorrow|tonight|daily|weekly|every day|every week|follow up|follow-up|notify)\b/i;
+const HYPERLIQUID_BALANCE_KEYWORD_PATTERN =
+  /\b(balance|balances|portfolio|holdings|wallet|position|positions|pnl|net worth|worth|usdc)\b/i;
 const ETHEREUM_ADDRESS_PATTERN = /\b0x[a-fA-F0-9]{40}\b/g;
 const TOOL_PROGRESS_REPLY = "I am checking that now. Please wait a moment.";
 const LOG_VALUE_LIMIT = 400;
@@ -81,27 +96,17 @@ const NON_PROGRESS_TOOL_NAMES = new Set([WORKING_MEMORY_TOOL_NAME]);
 function createFirstWalletOnboardingReply(wallet: AppWallet | null, network: HyperliquidNetwork): string {
   const address = wallet?.address?.trim();
   if (!address) {
-    if (network === "testnet") {
-      return 'Your testnet wallet is ready. Ask "show my wallet address" next, then fund it with testnet USDC before you start trading.';
-    }
-
     return 'Your wallet is ready. Ask "show my wallet address" next, then deposit USDC before you start trading.';
   }
-
-  if (network === "testnet") {
-    return [
-      "Your testnet wallet is ready.",
-      `Deposit address: ${address}`,
-      "Fund this wallet with testnet USDC before trading on Hyperliquid testnet.",
-      "If you need testnet funds, use the Hyperliquid testnet faucet at https://app.hyperliquid-testnet.xyz/drip.",
-      'After funding, you can say things like "show my portfolio", "show BTC market data", or "buy 0.01 BTC".',
-    ].join("\n");
-  }
+  const fundingInstruction =
+    network === "testnet"
+      ? "Please deposit USDC to this address. Hyperliquid testnet is the target network."
+      : "Please deposit USDC to this address. Arbitrum is the default funding route.";
 
   return [
     "Your wallet is ready.",
     `Deposit address: ${address}`,
-    "Please deposit USDC to this address. Arbitrum is the default funding route.",
+    fundingInstruction,
     'After funding, you can say things like "show my portfolio", "show BTC market data", or "buy 0.01 BTC".',
   ].join("\n");
 }
@@ -271,6 +276,29 @@ export function shouldResolveMcpToolsets(text: string): boolean {
   return MCP_KEYWORD_PATTERN.test(text);
 }
 
+export function shouldResolveMcpToolsetsForNetwork(text: string, network: HyperliquidNetwork): boolean {
+  if (network === "testnet" && HYPERLIQUID_BALANCE_KEYWORD_PATTERN.test(text)) {
+    return false;
+  }
+
+  return shouldResolveMcpToolsets(text);
+}
+
+export function selectAgentScope(text: string): AgentToolScope {
+  const hasFinanceIntent = FINANCE_KEYWORD_PATTERN.test(text) || MCP_KEYWORD_PATTERN.test(text);
+  const hasMessagingIntent = MESSAGING_KEYWORD_PATTERN.test(text);
+
+  if (hasFinanceIntent && hasMessagingIntent) {
+    return "full";
+  }
+
+  if (hasMessagingIntent) {
+    return "messaging";
+  }
+
+  return "core";
+}
+
 export function getDirectMessageFailureReply(error: unknown): string {
   if (typeof error === "object" && error !== null && "statusCode" in error && error.statusCode === 429) {
     const retryAfterSeconds = getRetryAfterSeconds(error);
@@ -333,8 +361,13 @@ export function createDirectMessageHandler(deps: DirectMessageHandlerDeps) {
         return;
       }
 
-      const toolsets = shouldResolveMcpToolsets(text) ? await deps.resolveToolsets?.() : undefined;
-      const result = await deps.agent.generate(text, {
+      const agentScope = selectAgentScope(text);
+      const toolsets = shouldResolveMcpToolsetsForNetwork(text, deps.hyperliquidNetwork)
+        ? await deps.resolveToolsets?.(text)
+        : undefined;
+      const agent = deps.selectAgent(text);
+      logger.debug(`[agent] selected scope=${agentScope} mcp=${toolsets ? "enabled" : "disabled"}`);
+      const result = await agent.generate(text, {
         memory: { resource: freshUserContext.resourceKey, thread: "default" },
         maxSteps: deps.maxSteps,
         toolsets,
@@ -379,7 +412,7 @@ export async function main() {
   const app = await buildAppContainer();
 
   const heartbeat = new HeartbeatEngine({
-    agent: app.agent,
+    agent: app.agents.core,
     ownerPhone: app.config.ownerPhone,
     sendMessage: async (to, text) => app.sdk.send(to, text),
     heartbeat: app.config.heartbeat,
@@ -388,12 +421,21 @@ export async function main() {
 
   const onDirectMessage = createDirectMessageHandler({
     ownerPhone: app.config.ownerPhone,
-    agent: app.agent,
+    selectAgent: (text) => {
+      const scope = selectAgentScope(text);
+      if (scope === "messaging") {
+        return app.agents.messaging;
+      }
+      if (scope === "full") {
+        return app.agents.full;
+      }
+      return app.agents.core;
+    },
     sendMessage: async (to, text) => app.sdk.send(to, text),
     userContextResolver: app.userContextResolver,
     turnkeyProvisioning: app.turnkeyProvisioning,
     hyperliquidNetwork: app.config.hyperliquid.network,
-    resolveToolsets: app.mcpRuntime.getToolsets,
+    resolveToolsets: app.mcpRuntime.getToolsetsForText,
     maxSteps: app.config.agent.maxSteps,
   });
 

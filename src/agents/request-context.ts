@@ -17,9 +17,34 @@ export interface AgentRequestContextValues {
   turnkeyDelegatedUserId?: string;
 }
 
-const SELF_RECIPIENT_ALIASES = new Set(["me", "myself", "self", "you", "the user", "owner"]);
+const SELF_RECIPIENT_ALIASES = new Set([
+  "me",
+  "myself",
+  "self",
+  "you",
+  "the user",
+  "owner",
+  "自分",
+  "自分に",
+  "自分へ",
+  "自分自身",
+  "私",
+  "わたし",
+  "僕",
+  "ぼく",
+  "俺",
+  "おれ",
+]);
 
-const CHAT_RECIPIENT_ALIASES = new Set(["this chat", "current chat", "here"]);
+const CHAT_RECIPIENT_ALIASES = new Set([
+  "this chat",
+  "current chat",
+  "here",
+  "このチャット",
+  "この会話",
+  "このスレッド",
+  "ここ",
+]);
 
 function cleanValue(value: string | undefined) {
   const trimmed = value?.trim();

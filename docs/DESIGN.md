@@ -70,7 +70,7 @@ graph TB
 
 - Tool steps are logged during execution.
 - A progress reply can be sent once when the agent starts calling meaningful tools.
-- The final user-facing reply stays iMessage-safe: no structural Markdown, limited inline text effects only when they improve readability, and copyable identifiers should remain easy to copy.
+- The final user-facing reply stays iMessage-safe: no structural Markdown, no Markdown text effects, and purposeful emoji plus line breaks should carry most of the scanability. Copyable identifiers should remain easy to copy.
 
 ## Wallet and Trading Design
 
@@ -142,7 +142,7 @@ Mastra memory stores conversational state, but not authoritative wallet state.
 
 ## Operational Constraints
 
-- iMessage responses must stay iMessage-safe: avoid structural Markdown, keep inline effects sparse, and keep copyable identifiers unstyled
+- iMessage responses must stay iMessage-safe: avoid structural Markdown, avoid Markdown text effects, use emoji and line breaks for lightweight visual structure, and keep copyable identifiers unstyled
 - one local process owns the message loop
 - wallet and signer state transitions must be persisted
 - docs should describe the codebase as a trading agent, not a generic assistant starter

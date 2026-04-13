@@ -56,7 +56,7 @@ export class TurnkeyProvisioningService implements TurnkeyProvisioningPort {
         this.createWalletRecord({
           id: walletId,
           userId: userContext.id,
-          linkage,
+          linkage: bootstrap.linkage,
           signerStatus: bootstrap.signerStatus,
           createdAt: current?.createdAt ?? startedAt,
           updatedAt,

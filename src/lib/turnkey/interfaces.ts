@@ -15,7 +15,9 @@ export interface TurnkeyProvisioningAdapter {
   validateAccess(): Promise<void>;
   lookupSubOrganizationByPhone(phoneNumber: string): Promise<TurnkeyWalletLinkage | null>;
   provisionSubOrganization(input: { phoneNumber: string; userId: string }): Promise<TurnkeyWalletLinkage>;
-  bootstrapDelegatedSigner(linkage: TurnkeyWalletLinkage): Promise<{ signerStatus: AppWallet["signerStatus"] }>;
+  bootstrapDelegatedSigner(
+    linkage: TurnkeyWalletLinkage,
+  ): Promise<{ signerStatus: AppWallet["signerStatus"]; linkage: TurnkeyWalletLinkage }>;
 }
 
 export interface TurnkeySignerClientFactory {

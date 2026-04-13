@@ -16,7 +16,7 @@ export function containsTradeConfirmation(message: string | undefined, code: str
   }
 
   const normalized = normalizeText(message);
-  return normalized.includes(`confirm ${code}`) || normalized.includes(`execute ${code}`);
+  return normalized === `confirm ${code}` || normalized === `execute ${code}`;
 }
 
 export function createTradeConfirmationMessage(summary: string, code: string): string {

@@ -20,7 +20,7 @@ const AGENT_AUTONOMY_DEFAULTS = {
     enabled: false,
   },
   memory: {
-    lastMessages: 8,
+    lastMessages: 4,
   },
 } as const;
 
@@ -106,7 +106,7 @@ export function createAppConfig(source = env): AppConfig {
     logLevel: source.LOG_LEVEL,
     multiUserMode: source.MULTI_USER_MODE,
     agent: {
-      model: source.ANTHROPIC_MODEL,
+      model: source.OPENAI_MODEL,
       maxSteps: AGENT_AUTONOMY_DEFAULTS.maxSteps,
       maxOutputTokens: AGENT_AUTONOMY_DEFAULTS.maxOutputTokens,
       memory: {
@@ -114,7 +114,7 @@ export function createAppConfig(source = env): AppConfig {
         lastMessages: AGENT_AUTONOMY_DEFAULTS.memory.lastMessages,
         observationalMemory: {
           enabled: AGENT_AUTONOMY_DEFAULTS.observationalMemory.enabled,
-          model: source.ANTHROPIC_MODEL,
+          model: source.OPENAI_MODEL,
         },
       },
     },

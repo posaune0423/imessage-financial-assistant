@@ -24,7 +24,11 @@ export interface AppContainer {
   sdk: IMessageSDK;
   repositoryContext: SqliteRepositoryContext;
   toolRuntime: AgentToolRuntime;
-  agent: ReturnType<typeof createGeneralAgent>;
+  agents: {
+    core: ReturnType<typeof createGeneralAgent>;
+    messaging: ReturnType<typeof createGeneralAgent>;
+    full: ReturnType<typeof createGeneralAgent>;
+  };
   mcpRuntime: ReturnType<typeof createMcpRuntime>;
   userContextResolver: UserContextResolver;
   turnkeyProvisioning: TurnkeyProvisioningService;
@@ -70,15 +74,20 @@ export async function buildAppContainer(config: AppConfig = appConfig): Promise<
     scheduler: createSchedulingLifecycleLogger("scheduler"),
     reminders: createSchedulingLifecycleLogger("reminder"),
   });
-  const agent = createGeneralAgent(
-    config.agent,
-    createAgentTools(toolRuntime, config.tools, {
-      wallets: walletService,
-      userContextResolver,
-      turnkeyProvisioning,
-      hyperliquid: hyperliquidService,
-    }),
-  );
+  const agentServices = {
+    wallets: walletService,
+    userContextResolver,
+    turnkeyProvisioning,
+    hyperliquid: hyperliquidService,
+  };
+  const agents = {
+    core: createGeneralAgent(config.agent, createAgentTools(toolRuntime, config.tools, agentServices, "core")),
+    messaging: createGeneralAgent(
+      config.agent,
+      createAgentTools(toolRuntime, config.tools, agentServices, "messaging"),
+    ),
+    full: createGeneralAgent(config.agent, createAgentTools(toolRuntime, config.tools, agentServices, "full")),
+  };
   const mcpRuntime = createMcpRuntime(config.mcp);
 
   return {
@@ -86,7 +95,7 @@ export async function buildAppContainer(config: AppConfig = appConfig): Promise<
     sdk,
     repositoryContext,
     toolRuntime,
-    agent,
+    agents,
     mcpRuntime,
     userContextResolver,
     turnkeyProvisioning,

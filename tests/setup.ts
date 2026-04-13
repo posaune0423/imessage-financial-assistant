@@ -1,5 +1,5 @@
-process.env.ANTHROPIC_API_KEY ??= "test-anthropic-key";
-process.env.ANTHROPIC_MODEL ??= "anthropic/claude-haiku-4-5";
+process.env.OPENAI_API_KEY ??= "test-openai-key";
+process.env.OPENAI_MODEL ??= "openai/gpt-5.4-mini";
 process.env.OWNER_PHONE ??= "+819012345678";
 process.env.DATABASE_URL ??= "file:./data/test-agent.db";
 process.env.IMESSAGE_SCHEDULER_PERSIST_PATH ??= "./data/test-imessage-scheduler.json";

@@ -84,7 +84,7 @@ function createTurnkeyAdapter(overrides?: Partial<TurnkeyProvisioningAdapter>): 
     validateAccess: async () => {},
     lookupSubOrganizationByPhone: async () => null,
     provisionSubOrganization: async () => linkage,
-    bootstrapDelegatedSigner: async () => ({ signerStatus: "ready" as const }),
+    bootstrapDelegatedSigner: async () => ({ signerStatus: "ready" as const, linkage }),
     ...overrides,
   };
 }
@@ -124,7 +124,10 @@ describe("TurnkeyProvisioningService", () => {
       throw new Error("should not provision");
     });
     const bootstrapDelegatedSigner = vi.fn(
-      async (): Promise<{ signerStatus: AppWallet["signerStatus"] }> => ({ signerStatus: "ready" }),
+      async (): Promise<{ signerStatus: AppWallet["signerStatus"]; linkage: TurnkeyWalletLinkage }> => ({
+        signerStatus: "ready",
+        linkage,
+      }),
     );
     const turnkey = createTurnkeyAdapter({
       lookupSubOrganizationByPhone,
@@ -154,7 +157,10 @@ describe("TurnkeyProvisioningService", () => {
     const lookupSubOrganizationByPhone = vi.fn(async (): Promise<TurnkeyWalletLinkage | null> => null);
     const provisionSubOrganization = vi.fn(async (): Promise<TurnkeyWalletLinkage> => linkage);
     const bootstrapDelegatedSigner = vi.fn(
-      async (): Promise<{ signerStatus: AppWallet["signerStatus"] }> => ({ signerStatus: "degraded" }),
+      async (): Promise<{ signerStatus: AppWallet["signerStatus"]; linkage: TurnkeyWalletLinkage }> => ({
+        signerStatus: "degraded",
+        linkage,
+      }),
     );
     const turnkey = createTurnkeyAdapter({
       lookupSubOrganizationByPhone,
