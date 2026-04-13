@@ -1,5 +1,4 @@
-import { ApiKeyStamper } from "@turnkey/sdk-server";
-import { TurnkeyClient } from "@turnkey/http";
+import { Turnkey } from "@turnkey/sdk-server";
 import { createAccount } from "@turnkey/viem";
 import { getAddress } from "viem";
 
@@ -19,15 +18,12 @@ export class TurnkeyViemAccountFactory implements TurnkeySignerClientFactory {
     const delegatedCredentials = readDelegatedApiKeyCredentials(wallet.turnkeyDelegatedKeyRef);
     const ethereumAddress = getAddress(wallet.address);
 
-    const client = new TurnkeyClient(
-      {
-        baseUrl: this.config.apiBaseUrl,
-      },
-      new ApiKeyStamper({
-        apiPublicKey: delegatedCredentials.apiPublicKey,
-        apiPrivateKey: delegatedCredentials.apiPrivateKey,
-      }),
-    );
+    const client = new Turnkey({
+      apiBaseUrl: this.config.apiBaseUrl,
+      apiPublicKey: delegatedCredentials.apiPublicKey,
+      apiPrivateKey: delegatedCredentials.apiPrivateKey,
+      defaultOrganizationId: wallet.turnkeyOrganizationId,
+    }).apiClient();
 
     return createAccount({
       client,
