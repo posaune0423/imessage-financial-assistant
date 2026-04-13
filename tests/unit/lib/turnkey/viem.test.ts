@@ -46,7 +46,7 @@ vi.mock("../../../../src/lib/turnkey/delegated-credentials", () => ({
 describe("TurnkeyViemAccountFactory", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.sdkServer.Turnkey.mockImplementation((config: unknown) => {
+    mocks.sdkServer.Turnkey.mockImplementation(function TurnkeyMock(config: unknown) {
       return {
         config,
         apiClient: () => ({ kind: "server-client" }),
