@@ -16,15 +16,9 @@ export function containsTradeConfirmation(message: string | undefined, code: str
   }
 
   const normalized = normalizeText(message);
-  return (
-    normalized.includes(`confirm ${code}`) ||
-    normalized.includes(`execute ${code}`) ||
-    normalized.includes(`注文実行 ${code}`) ||
-    normalized.includes(`実行 ${code}`) ||
-    normalized.includes(`確認 ${code}`)
-  );
+  return normalized.includes(`confirm ${code}`) || normalized.includes(`execute ${code}`);
 }
 
 export function createTradeConfirmationMessage(summary: string, code: string): string {
-  return `${summary}\n実行する場合は「注文実行 ${code}」と送ってください。`;
+  return `${summary}\nTo execute, reply with "confirm ${code}".`;
 }

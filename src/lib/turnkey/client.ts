@@ -2,6 +2,7 @@ import { Turnkey } from "@turnkey/sdk-server";
 
 import type { TurnkeyConfig } from "../../config";
 import type { TurnkeyProvisioningAdapter, TurnkeyWalletLinkage } from "./interfaces";
+import { logger } from "../../utils/logger";
 
 const DEFAULT_ETHEREUM_ACCOUNT = {
   curve: "CURVE_SECP256K1",
@@ -11,6 +12,7 @@ const DEFAULT_ETHEREUM_ACCOUNT = {
 } as const;
 
 type UnaryCallable = (input: unknown) => unknown;
+const TURNKEY_LOG_VALUE_LIMIT = 1_000;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -100,37 +102,82 @@ function getUserId(user: unknown): string | null {
   return getString(user, "userId");
 }
 
-export class TurnkeyProvisioningClient implements TurnkeyProvisioningAdapter {
-  private readonly sdk: Turnkey | null;
+function formatDebugValue(value: unknown): string {
+  try {
+    const serialized = JSON.stringify(value);
+    if (!serialized) {
+      return String(value);
+    }
 
-  constructor(private readonly config: TurnkeyConfig) {
-    this.sdk =
-      config.apiPublicKey && config.apiPrivateKey && config.organizationId
-        ? new Turnkey({
-            apiBaseUrl: config.apiBaseUrl,
-            apiPublicKey: config.apiPublicKey,
-            apiPrivateKey: config.apiPrivateKey,
-            defaultOrganizationId: config.organizationId,
-          })
-        : null;
+    return serialized.length > TURNKEY_LOG_VALUE_LIMIT
+      ? `${serialized.slice(0, TURNKEY_LOG_VALUE_LIMIT)}...`
+      : serialized;
+  } catch {
+    return String(value);
+  }
+}
+
+function formatTurnkeyConfigurationError(organizationId: string, error: unknown): Error {
+  const message = error instanceof Error ? error.message : String(error);
+  if (message.includes("could not find public key in organization")) {
+    return new Error(
+      `Turnkey authentication failed. TURNKEY_ORGANIZATION_ID (${organizationId}) must be the organization that owns TURNKEY_API_PUBLIC_KEY. Verify that TURNKEY_API_PUBLIC_KEY and TURNKEY_API_PRIVATE_KEY were created under that organization.`,
+      { cause: error },
+    );
   }
 
-  isConfigured(): boolean {
-    return this.sdk !== null;
+  return new Error(`Turnkey request failed for organization ${organizationId}: ${message}`, { cause: error });
+}
+
+export class TurnkeyProvisioningClient implements TurnkeyProvisioningAdapter {
+  private readonly sdk: Turnkey;
+
+  constructor(private readonly config: TurnkeyConfig) {
+    this.sdk = new Turnkey({
+      apiBaseUrl: config.apiBaseUrl,
+      apiPublicKey: config.apiPublicKey,
+      apiPrivateKey: config.apiPrivateKey,
+      defaultOrganizationId: config.organizationId,
+    });
+  }
+
+  async validateAccess(): Promise<void> {
+    const client = this.sdk.apiClient();
+    const whoami = getTurnkeyMethod(client, "getWhoami");
+
+    try {
+      await this.runTurnkeyRequest(
+        "getWhoami",
+        {
+          organizationId: this.config.organizationId,
+        },
+        async () =>
+          whoami({
+            organizationId: this.config.organizationId,
+          }),
+      );
+    } catch (error) {
+      throw formatTurnkeyConfigurationError(this.config.organizationId, error);
+    }
   }
 
   async lookupSubOrganizationByPhone(phoneNumber: string): Promise<TurnkeyWalletLinkage | null> {
-    if (!this.sdk || !this.config.organizationId) {
-      return null;
-    }
-
     const client = this.sdk.apiClient();
     const getVerifiedSubOrgIds = getTurnkeyMethod(client, "getVerifiedSubOrgIds");
-    const response = await getVerifiedSubOrgIds({
-      organizationId: this.config.organizationId,
-      filterType: "PHONE_NUMBER",
-      filterValue: phoneNumber,
-    });
+    const response = await this.runTurnkeyRequest(
+      "getVerifiedSubOrgIds",
+      {
+        organizationId: this.config.organizationId,
+        filterType: "PHONE_NUMBER",
+        filterValue: phoneNumber,
+      },
+      async () =>
+        getVerifiedSubOrgIds({
+          organizationId: this.config.organizationId,
+          filterType: "PHONE_NUMBER",
+          filterValue: phoneNumber,
+        }),
+    );
     const organizationId = getArray(response, "organizationIds")[0];
 
     if (typeof organizationId !== "string" || !organizationId.trim()) {
@@ -140,27 +187,29 @@ export class TurnkeyProvisioningClient implements TurnkeyProvisioningAdapter {
     return this.loadWalletLinkage(organizationId);
   }
 
-  async provisionSubOrganization(input: { phoneNumber: string; appUserId: string }): Promise<TurnkeyWalletLinkage> {
-    if (!this.sdk) {
-      throw new Error("Turnkey provisioning is not configured");
-    }
-
+  async provisionSubOrganization(input: { phoneNumber: string; userId: string }): Promise<TurnkeyWalletLinkage> {
     const client = this.sdk.apiClient();
     const createSubOrganization = getTurnkeyMethod(client, "createSubOrganization");
-    const response = await createSubOrganization({
-      subOrganizationName: `imessage-user-${input.appUserId}`,
+    const request = {
+      subOrganizationName: `imessage-user-${input.userId}`,
       rootQuorumThreshold: 1,
       rootUsers: [
         {
           userName: input.phoneNumber,
           userPhoneNumber: input.phoneNumber,
+          apiKeys: [],
+          authenticators: [],
+          oauthProviders: [],
         },
       ],
       wallet: {
         walletName: "Primary Wallet",
         accounts: [DEFAULT_ETHEREUM_ACCOUNT],
       },
-    });
+    } as const;
+    const response = await this.runTurnkeyRequest("createSubOrganization", request, async () =>
+      createSubOrganization(request),
+    );
 
     const organizationId = getString(response, "subOrganizationId");
     if (!organizationId) {
@@ -172,27 +221,29 @@ export class TurnkeyProvisioningClient implements TurnkeyProvisioningAdapter {
 
   async bootstrapDelegatedSigner(linkage: TurnkeyWalletLinkage) {
     return {
-      signerStatus:
-        linkage.delegatedUserId || (this.config.apiPublicKey && this.config.apiPrivateKey) ? "ready" : "degraded",
+      signerStatus: linkage.delegatedUserId ? "ready" : "degraded",
     } as const;
   }
 
   private async loadWalletLinkage(organizationId: string): Promise<TurnkeyWalletLinkage> {
-    if (!this.sdk) {
-      throw new Error("Turnkey provisioning is not configured");
-    }
-
     const client = this.sdk.apiClient();
     const getUsers = getTurnkeyMethod(client, "getUsers");
     const getWallets = getTurnkeyMethod(client, "getWallets");
-    const [usersResponse, walletsResponse] = await Promise.all([
-      getUsers({
+    const [usersResponse, walletsResponse] = await this.runTurnkeyRequest(
+      "loadWalletLinkage:getUsers+getWallets",
+      {
         organizationId,
-      }),
-      getWallets({
-        organizationId,
-      }),
-    ]);
+      },
+      async () =>
+        Promise.all([
+          getUsers({
+            organizationId,
+          }),
+          getWallets({
+            organizationId,
+          }),
+        ]),
+    );
 
     const wallet = getArray(walletsResponse, "wallets")[0];
     const walletId = getWalletId(wallet);
@@ -201,10 +252,18 @@ export class TurnkeyProvisioningClient implements TurnkeyProvisioningAdapter {
     }
 
     const getWalletAccounts = getTurnkeyMethod(client, "getWalletAccounts");
-    const accountsResponse = await getWalletAccounts({
-      organizationId,
-      walletId,
-    });
+    const accountsResponse = await this.runTurnkeyRequest(
+      "getWalletAccounts",
+      {
+        organizationId,
+        walletId,
+      },
+      async () =>
+        getWalletAccounts({
+          organizationId,
+          walletId,
+        }),
+    );
     const account = getArray(accountsResponse, "accounts")[0];
     const accountId = getWalletAccountId(account);
     const address = getAddressFromAccount(account);
@@ -232,5 +291,20 @@ export class TurnkeyProvisioningClient implements TurnkeyProvisioningAdapter {
         ? `${this.config.delegatedKeySecretNamespace}/${organizationId}/${delegatedUserId}`
         : null,
     };
+  }
+
+  private async runTurnkeyRequest<T>(operationName: string, input: unknown, operation: () => Promise<T>): Promise<T> {
+    logger.debug(`[turnkey] -> ${operationName} input=${formatDebugValue(input)}`);
+
+    try {
+      const result = await operation();
+      logger.debug(`[turnkey] <- ${operationName} result=${formatDebugValue(result)}`);
+      return result;
+    } catch (error) {
+      logger.debug(
+        `[turnkey] !! ${operationName} error=${formatDebugValue(error instanceof Error ? error.message : error)}`,
+      );
+      throw formatTurnkeyConfigurationError(this.config.organizationId, error);
+    }
   }
 }

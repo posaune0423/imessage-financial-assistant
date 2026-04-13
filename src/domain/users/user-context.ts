@@ -1,26 +1,26 @@
 import { randomUUID } from "node:crypto";
 
-import { normalizePhone } from "../../utils/phone";
-import type { AppUserRepository } from "../../repositories/interfaces/app-user-repository";
+import type { UserRepository } from "../../repositories/interfaces/user-repository";
 import type { WalletRepository } from "../../repositories/interfaces/wallet-repository";
+import { normalizePhone } from "../../utils/phone";
 import type { IncomingUserMessage, MessagingIdentity, MessagingIdentityType, UserContext } from "./types";
 
 function nowIso() {
   return new Date().toISOString();
 }
 
-function createResourceKey(appUserId: string) {
-  return `app-user:${appUserId}`;
+function createResourceKey(userId: string) {
+  return `user:${userId}`;
 }
 
 function createIdentityRecord(
-  appUserId: string,
+  userId: string,
   identity: string,
   identityType: MessagingIdentityType,
 ): MessagingIdentity {
   return {
     id: randomUUID(),
-    appUserId,
+    userId,
     channel: "imessage",
     identity,
     identityType,
@@ -46,7 +46,7 @@ function buildIdentityCandidates(message: IncomingUserMessage): Array<MessagingI
 
 export class UserContextResolver {
   constructor(
-    private readonly appUsers: AppUserRepository,
+    private readonly users: UserRepository,
     private readonly wallets: WalletRepository,
   ) {}
 
@@ -58,16 +58,16 @@ export class UserContextResolver {
 
     const chatId = message.chatId?.trim() || undefined;
     const candidates = buildIdentityCandidates(message);
-    const appUser = (await this.findExistingUser(candidates)) ?? (await this.createAppUser());
+    const user = (await this.findExistingUser(candidates)) ?? (await this.createUser());
 
-    await this.bindMissingIdentities(appUser.id, candidates);
+    await this.bindMissingIdentities(user.id, candidates);
 
-    const existingUser = await this.appUsers.findById(appUser.id);
+    const existingUser = await this.users.findById(user.id);
     if (!existingUser) {
-      throw new Error(`Failed to reload app user ${appUser.id}`);
+      throw new Error(`Failed to reload user ${user.id}`);
     }
 
-    const wallet = await this.wallets.findPrimaryWalletByAppUserId(existingUser.id);
+    const wallet = await this.wallets.findPrimaryWalletByUserId(existingUser.id);
     return {
       id: existingUser.id,
       resourceKey: existingUser.resourceKey,
@@ -78,11 +78,11 @@ export class UserContextResolver {
     };
   }
 
-  private async createAppUser() {
+  private async createUser() {
     const id = randomUUID();
     const createdAt = nowIso();
 
-    return this.appUsers.createAppUser({
+    return this.users.createUser({
       id,
       resourceKey: createResourceKey(id),
       createdAt,
@@ -92,17 +92,17 @@ export class UserContextResolver {
 
   private async findExistingUser(candidates: MessagingIdentity[]) {
     for (const candidate of candidates) {
-      const appUser = await this.appUsers.findByMessagingIdentity(candidate.channel, candidate.identity);
-      if (appUser) {
-        return appUser;
+      const user = await this.users.findByMessagingIdentity(candidate.channel, candidate.identity);
+      if (user) {
+        return user;
       }
     }
 
     return null;
   }
 
-  private async bindMissingIdentities(appUserId: string, candidates: MessagingIdentity[]) {
-    const existing = await this.appUsers.listMessagingIdentities(appUserId);
+  private async bindMissingIdentities(userId: string, candidates: MessagingIdentity[]) {
+    const existing = await this.users.listMessagingIdentities(userId);
     const existingKeys = new Set(existing.map((item) => `${item.channel}:${item.identity}`));
 
     for (const candidate of candidates) {
@@ -111,9 +111,9 @@ export class UserContextResolver {
         continue;
       }
 
-      await this.appUsers.createMessagingIdentity({
+      await this.users.createMessagingIdentity({
         id: candidate.id,
-        appUserId,
+        userId,
         channel: candidate.channel,
         identity: candidate.identity,
         identityType: candidate.identityType,

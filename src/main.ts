@@ -4,7 +4,9 @@ import type { ToolsetsInput } from "@mastra/core/agent";
 import { HeartbeatEngine } from "./agents/heartbeat";
 import { createAgentRequestContext } from "./agents/request-context";
 import { buildAppContainer } from "./di";
+import type { HyperliquidNetwork } from "./config";
 import type { UserContextResolver } from "./domain/users/user-context";
+import type { AppWallet } from "./domain/users/types";
 import type { TurnkeyProvisioningService } from "./lib/turnkey/provisioning";
 import { logger } from "./utils/logger";
 import { acquireProcessLock } from "./utils/process-lock";
@@ -62,17 +64,112 @@ interface DirectMessageHandlerDeps {
   sendMessage: (to: string, text: string) => Promise<unknown>;
   userContextResolver: UserContextResolver;
   turnkeyProvisioning: TurnkeyProvisioningService;
+  hyperliquidNetwork: HyperliquidNetwork;
   resolveToolsets?: () => Promise<ToolsetsInput>;
   maxSteps?: number;
 }
 
 const MCP_KEYWORD_PATTERN =
   /\b(allium|wallet|onchain|on-chain|blockchain|crypto|token|defi|dex|swap|bridge|ethereum|solana|bitcoin|btc|eth|usdc|contract|address|transaction|balance|holder|pool|liquidity)\b/i;
-const TOOL_PROGRESS_REPLY = "確認しながら進めています。少し待ってください。";
+const ETHEREUM_ADDRESS_PATTERN = /\b0x[a-fA-F0-9]{40}\b/g;
+const TOOL_PROGRESS_REPLY = "I am checking that now. Please wait a moment.";
 const LOG_VALUE_LIMIT = 400;
 const WORKING_MEMORY_TOOL_NAME = "updateWorkingMemory";
 const PROCESS_LOCK_PATH = "./data/imessage-agent.lock";
 const NON_PROGRESS_TOOL_NAMES = new Set([WORKING_MEMORY_TOOL_NAME]);
+
+function createFirstWalletOnboardingReply(wallet: AppWallet | null, network: HyperliquidNetwork): string {
+  const address = wallet?.address?.trim();
+  if (!address) {
+    if (network === "testnet") {
+      return 'Your testnet wallet is ready. Ask "show my wallet address" next, then fund it with testnet USDC before you start trading.';
+    }
+
+    return 'Your wallet is ready. Ask "show my wallet address" next, then deposit USDC before you start trading.';
+  }
+
+  if (network === "testnet") {
+    return [
+      "Your testnet wallet is ready.",
+      `Deposit address: ${address}`,
+      "Fund this wallet with testnet USDC before trading on Hyperliquid testnet.",
+      "If you need testnet funds, use the Hyperliquid testnet faucet at https://app.hyperliquid-testnet.xyz/drip.",
+      'After funding, you can say things like "show my portfolio", "show BTC market data", or "buy 0.01 BTC".',
+    ].join("\n");
+  }
+
+  return [
+    "Your wallet is ready.",
+    `Deposit address: ${address}`,
+    "Please deposit USDC to this address. Arbitrum is the default funding route.",
+    'After funding, you can say things like "show my portfolio", "show BTC market data", or "buy 0.01 BTC".',
+  ].join("\n");
+}
+
+function splitReplyIntoMessages(text: string): string[] {
+  const messages: string[] = [];
+  let buffer: string[] = [];
+
+  const flushBuffer = () => {
+    const message = buffer.join("\n").trim();
+    if (message) {
+      messages.push(message);
+    }
+    buffer = [];
+  };
+
+  for (const rawLine of text.split("\n")) {
+    const line = rawLine.trim();
+    if (!line) {
+      if (buffer.length > 0 && buffer[buffer.length - 1] !== "") {
+        buffer.push("");
+      }
+      continue;
+    }
+
+    ETHEREUM_ADDRESS_PATTERN.lastIndex = 0;
+    const matches = [...line.matchAll(ETHEREUM_ADDRESS_PATTERN)];
+    if (matches.length === 0) {
+      buffer.push(line);
+      continue;
+    }
+
+    let cursor = 0;
+    for (const match of matches) {
+      const address = match[0];
+      const index = match.index ?? 0;
+      const before = line.slice(cursor, index).trim();
+      if (before) {
+        buffer.push(before);
+        flushBuffer();
+      } else {
+        flushBuffer();
+      }
+
+      messages.push(address);
+      cursor = index + address.length;
+    }
+
+    const after = line.slice(cursor).trim();
+    if (after) {
+      buffer.push(after);
+    }
+  }
+
+  flushBuffer();
+  return messages;
+}
+
+async function sendIMessageSafeReply(
+  sendMessage: DirectMessageHandlerDeps["sendMessage"],
+  target: string,
+  text: string,
+) {
+  for (const chunk of splitReplyIntoMessages(text)) {
+    logger.info(`[imessage] -> to=${target} text=${JSON.stringify(chunk)}`);
+    await sendMessage(target, chunk);
+  }
+}
 
 function formatLogValue(value: unknown): string {
   try {
@@ -178,13 +275,13 @@ export function getDirectMessageFailureReply(error: unknown): string {
   if (typeof error === "object" && error !== null && "statusCode" in error && error.statusCode === 429) {
     const retryAfterSeconds = getRetryAfterSeconds(error);
     if (retryAfterSeconds) {
-      return `今少し混み合っています。${retryAfterSeconds}秒ほど待ってからもう一度送ってください。`;
+      return `Things are busy right now. Please try again in about ${retryAfterSeconds} seconds.`;
     }
 
-    return "今少し混み合っています。少し待ってからもう一度送ってください。";
+    return "Things are busy right now. Please try again shortly.";
   }
 
-  return "今ちょっと調子が悪いので、少し待ってからもう一度送ってください。";
+  return "Something went wrong. Please try again shortly.";
 }
 
 export function createDirectMessageHandler(deps: DirectMessageHandlerDeps) {
@@ -203,6 +300,7 @@ export function createDirectMessageHandler(deps: DirectMessageHandlerDeps) {
         chatId: message.chatId,
         text,
       });
+      const isFirstWalletProvision = !userContext.wallet || userContext.wallet.status === "none";
 
       if (!userContext.wallet || userContext.wallet.status === "none" || userContext.wallet.status === "failed") {
         await deps.turnkeyProvisioning.ensurePrimaryWallet(userContext);
@@ -218,7 +316,7 @@ export function createDirectMessageHandler(deps: DirectMessageHandlerDeps) {
         chatId: message.chatId ?? undefined,
         ownerPhone: deps.ownerPhone,
         incomingText: text,
-        appUserId: freshUserContext.id,
+        userId: freshUserContext.id,
         resourceKey: freshUserContext.resourceKey,
         walletAddress: freshUserContext.wallet?.address ?? undefined,
         walletStatus: freshUserContext.wallet?.status ?? "none",
@@ -228,6 +326,13 @@ export function createDirectMessageHandler(deps: DirectMessageHandlerDeps) {
         turnkeyAccountId: freshUserContext.wallet?.turnkeyAccountId ?? undefined,
         turnkeyDelegatedUserId: freshUserContext.wallet?.turnkeyDelegatedUserId ?? undefined,
       });
+
+      if (isFirstWalletProvision) {
+        const onboardingReply = createFirstWalletOnboardingReply(freshUserContext.wallet, deps.hyperliquidNetwork);
+        await sendIMessageSafeReply(deps.sendMessage, replyTarget, onboardingReply);
+        return;
+      }
+
       const toolsets = shouldResolveMcpToolsets(text) ? await deps.resolveToolsets?.() : undefined;
       const result = await deps.agent.generate(text, {
         memory: { resource: freshUserContext.resourceKey, thread: "default" },
@@ -259,8 +364,7 @@ export function createDirectMessageHandler(deps: DirectMessageHandlerDeps) {
         return;
       }
 
-      logger.info(`[imessage] -> to=${replyTarget} text=${JSON.stringify(reply)}`);
-      await deps.sendMessage(replyTarget, reply);
+      await sendIMessageSafeReply(deps.sendMessage, replyTarget, reply);
     } catch (error) {
       logger.error("[imessage] failed to handle direct message", error);
       const failureReply = getDirectMessageFailureReply(error);
@@ -288,6 +392,7 @@ export async function main() {
     sendMessage: async (to, text) => app.sdk.send(to, text),
     userContextResolver: app.userContextResolver,
     turnkeyProvisioning: app.turnkeyProvisioning,
+    hyperliquidNetwork: app.config.hyperliquid.network,
     resolveToolsets: app.mcpRuntime.getToolsets,
     maxSteps: app.config.agent.maxSteps,
   });
@@ -328,5 +433,10 @@ export async function main() {
 }
 
 if (import.meta.main) {
-  await main();
+  try {
+    await main();
+  } catch (error) {
+    logger.error("Application failed to start", error);
+    process.exit(1);
+  }
 }

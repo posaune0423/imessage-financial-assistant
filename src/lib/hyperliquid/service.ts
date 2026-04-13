@@ -3,6 +3,7 @@ import { ExchangeClient, HttpTransport, InfoClient } from "@nktkas/hyperliquid";
 import type { HyperliquidConfig } from "../../config";
 import type { AppWallet } from "../../domain/users/types";
 import type { TurnkeySignerClientFactory } from "../turnkey/interfaces";
+import { logger } from "../../utils/logger";
 import type {
   HyperliquidCancelInput,
   HyperliquidLeverageInput,
@@ -22,20 +23,25 @@ export class HyperliquidService implements HyperliquidUserFacingService {
   private readonly transport: HttpTransport;
   private readonly infoClient: InfoClient;
   private universeCache: Map<string, AssetMeta> | null = null;
+  private readonly network: HyperliquidConfig["network"];
 
   constructor(
     config: HyperliquidConfig,
     private readonly signerFactory: TurnkeySignerClientFactory,
   ) {
+    this.network = config.network;
     this.transport = new HttpTransport({
+      isTestnet: config.isTestnet,
       apiUrl: config.apiUrl,
     });
     this.infoClient = new InfoClient({
       transport: this.transport,
     });
+    logger.debug(`[hyperliquid] initialized network=${config.network} apiUrl=${config.apiUrl}`);
   }
 
   async getMarketSnapshot(coins?: string[]) {
+    logger.debug(`[hyperliquid] getMarketSnapshot network=${this.network} coins=${JSON.stringify(coins ?? [])}`);
     const [mids, universe] = await Promise.all([this.infoClient.allMids(), this.getUniverse()]);
     const selected = coins?.length ? coins.map((coin) => coin.toUpperCase()) : null;
     const assets = [...universe.values()]
@@ -49,36 +55,46 @@ export class HyperliquidService implements HyperliquidUserFacingService {
       }));
 
     return {
+      network: this.network,
       timestamp: new Date().toISOString(),
       assets,
     };
   }
 
   async getUserSummary(address: `0x${string}`) {
+    logger.debug(`[hyperliquid] getUserSummary network=${this.network} address=${address}`);
     const summary = await this.infoClient.clearinghouseState({ user: address });
     return {
+      network: this.network,
       address,
       summary,
     };
   }
 
   async getOpenOrders(address: `0x${string}`) {
+    logger.debug(`[hyperliquid] getOpenOrders network=${this.network} address=${address}`);
     const orders = await this.infoClient.frontendOpenOrders({ user: address });
     return {
+      network: this.network,
       address,
       orders,
     };
   }
 
   async getRecentFills(address: `0x${string}`, limit = 10) {
+    logger.debug(`[hyperliquid] getRecentFills network=${this.network} address=${address} limit=${limit}`);
     const fills = await this.infoClient.userFills({ user: address });
     return {
+      network: this.network,
       address,
       fills: fills.slice(0, Math.max(1, Math.min(limit, 50))),
     };
   }
 
   async placeOrder(wallet: AppWallet, input: HyperliquidOrderInput) {
+    logger.debug(
+      `[hyperliquid] placeOrder network=${this.network} wallet=${wallet.address ?? "unknown"} market=${input.market}`,
+    );
     const client = await this.createExchangeClient(wallet);
     const asset = await this.resolveAsset(input.market);
     const price = input.price ?? (await this.resolveMidPrice(asset.name));
@@ -103,6 +119,9 @@ export class HyperliquidService implements HyperliquidUserFacingService {
   }
 
   async cancelOrder(wallet: AppWallet, input: HyperliquidCancelInput) {
+    logger.debug(
+      `[hyperliquid] cancelOrder network=${this.network} wallet=${wallet.address ?? "unknown"} market=${input.market} orderId=${input.orderId}`,
+    );
     const client = await this.createExchangeClient(wallet);
     const asset = await this.resolveAsset(input.market);
 
@@ -117,6 +136,9 @@ export class HyperliquidService implements HyperliquidUserFacingService {
   }
 
   async modifyOrder(wallet: AppWallet, input: HyperliquidModifyInput) {
+    logger.debug(
+      `[hyperliquid] modifyOrder network=${this.network} wallet=${wallet.address ?? "unknown"} market=${input.market} orderId=${input.orderId}`,
+    );
     const client = await this.createExchangeClient(wallet);
     const asset = await this.resolveAsset(input.market);
 
@@ -138,6 +160,9 @@ export class HyperliquidService implements HyperliquidUserFacingService {
   }
 
   async updateLeverage(wallet: AppWallet, input: HyperliquidLeverageInput) {
+    logger.debug(
+      `[hyperliquid] updateLeverage network=${this.network} wallet=${wallet.address ?? "unknown"} market=${input.market} leverage=${input.leverage}`,
+    );
     const client = await this.createExchangeClient(wallet);
     const asset = await this.resolveAsset(input.market);
 

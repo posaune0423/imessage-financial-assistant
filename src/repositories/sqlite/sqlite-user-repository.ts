@@ -1,15 +1,11 @@
 import { and, eq } from "drizzle-orm";
 
-import type { AppUser, MessagingIdentity } from "../../domain/users/types";
-import type {
-  AppUserRepository,
-  CreateAppUserInput,
-  CreateMessagingIdentityInput,
-} from "../interfaces/app-user-repository";
+import type { MessagingIdentity, User } from "../../domain/users/types";
+import type { CreateUserInput, CreateMessagingIdentityInput, UserRepository } from "../interfaces/user-repository";
 import type { SqliteRepositoryContext } from "./client";
-import { appUsersTable, messagingIdentitiesTable } from "./schema";
+import { messagingIdentitiesTable, usersTable } from "./schema";
 
-function mapAppUser(row: typeof appUsersTable.$inferSelect): AppUser {
+function mapUser(row: typeof usersTable.$inferSelect): User {
   return {
     id: row.id,
     resourceKey: row.resourceKey,
@@ -25,7 +21,7 @@ function mapMessagingIdentity(row: typeof messagingIdentitiesTable.$inferSelect)
 
   return {
     id: row.id,
-    appUserId: row.appUserId,
+    userId: row.userId,
     channel,
     identity: row.identity,
     identityType,
@@ -33,43 +29,43 @@ function mapMessagingIdentity(row: typeof messagingIdentitiesTable.$inferSelect)
   };
 }
 
-export class SqliteAppUserRepository implements AppUserRepository {
+export class SqliteUserRepository implements UserRepository {
   constructor(private readonly context: SqliteRepositoryContext) {}
 
-  async findById(id: string): Promise<AppUser | null> {
-    const row = await this.context.db.query.appUsersTable.findFirst({
-      where: eq(appUsersTable.id, id),
+  async findById(id: string): Promise<User | null> {
+    const row = await this.context.db.query.usersTable.findFirst({
+      where: eq(usersTable.id, id),
     });
-    return row ? mapAppUser(row) : null;
+    return row ? mapUser(row) : null;
   }
 
-  async findByMessagingIdentity(channel: MessagingIdentity["channel"], identity: string): Promise<AppUser | null> {
+  async findByMessagingIdentity(channel: MessagingIdentity["channel"], identity: string): Promise<User | null> {
     const row = await this.context.db
       .select({
-        id: appUsersTable.id,
-        resourceKey: appUsersTable.resourceKey,
-        displayName: appUsersTable.displayName,
-        createdAt: appUsersTable.createdAt,
-        updatedAt: appUsersTable.updatedAt,
+        id: usersTable.id,
+        resourceKey: usersTable.resourceKey,
+        displayName: usersTable.displayName,
+        createdAt: usersTable.createdAt,
+        updatedAt: usersTable.updatedAt,
       })
       .from(messagingIdentitiesTable)
-      .innerJoin(appUsersTable, eq(messagingIdentitiesTable.appUserId, appUsersTable.id))
+      .innerJoin(usersTable, eq(messagingIdentitiesTable.userId, usersTable.id))
       .where(and(eq(messagingIdentitiesTable.channel, channel), eq(messagingIdentitiesTable.identity, identity)))
       .limit(1);
 
-    return row[0] ? mapAppUser(row[0]) : null;
+    return row[0] ? mapUser(row[0]) : null;
   }
 
-  async listMessagingIdentities(appUserId: string): Promise<MessagingIdentity[]> {
+  async listMessagingIdentities(userId: string): Promise<MessagingIdentity[]> {
     const rows = await this.context.db.query.messagingIdentitiesTable.findMany({
-      where: eq(messagingIdentitiesTable.appUserId, appUserId),
+      where: eq(messagingIdentitiesTable.userId, userId),
     });
 
     return rows.map(mapMessagingIdentity);
   }
 
-  async createAppUser(input: CreateAppUserInput): Promise<AppUser> {
-    await this.context.db.insert(appUsersTable).values({
+  async createUser(input: CreateUserInput): Promise<User> {
+    await this.context.db.insert(usersTable).values({
       id: input.id,
       resourceKey: input.resourceKey,
       displayName: input.displayName ?? null,
@@ -91,7 +87,7 @@ export class SqliteAppUserRepository implements AppUserRepository {
       .insert(messagingIdentitiesTable)
       .values({
         id: input.id,
-        appUserId: input.appUserId,
+        userId: input.userId,
         channel: input.channel,
         identity: input.identity,
         identityType: input.identityType,
@@ -101,7 +97,7 @@ export class SqliteAppUserRepository implements AppUserRepository {
 
     return {
       id: input.id,
-      appUserId: input.appUserId,
+      userId: input.userId,
       channel: input.channel,
       identity: input.identity,
       identityType: input.identityType,
@@ -109,12 +105,12 @@ export class SqliteAppUserRepository implements AppUserRepository {
     };
   }
 
-  async updateDisplayName(appUserId: string, displayName: string | null): Promise<void> {
+  async updateDisplayName(userId: string, displayName: string | null): Promise<void> {
     await this.context.db
-      .update(appUsersTable)
+      .update(usersTable)
       .set({
         displayName,
       })
-      .where(eq(appUsersTable.id, appUserId));
+      .where(eq(usersTable.id, userId));
   }
 }

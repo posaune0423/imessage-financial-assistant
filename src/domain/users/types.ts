@@ -3,7 +3,7 @@ export type SignerStatus = "not_bootstrapped" | "bootstrapping" | "ready" | "deg
 export type MessagingChannel = "imessage";
 export type MessagingIdentityType = "phone_number" | "chat_id";
 
-export interface AppUser {
+export interface User {
   id: string;
   resourceKey: string;
   displayName?: string | null;
@@ -13,7 +13,7 @@ export interface AppUser {
 
 export interface MessagingIdentity {
   id: string;
-  appUserId: string;
+  userId: string;
   channel: MessagingChannel;
   identity: string;
   identityType: MessagingIdentityType;
@@ -22,7 +22,7 @@ export interface MessagingIdentity {
 
 export interface AppWallet {
   id: string;
-  appUserId: string;
+  userId: string;
   chain: string;
   address: `0x${string}` | null;
   status: WalletStatus;

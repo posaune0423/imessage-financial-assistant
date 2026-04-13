@@ -6,7 +6,7 @@ export interface AgentRequestContextValues {
   ownerPhone?: string;
   isHeartbeat?: boolean;
   incomingText?: string;
-  appUserId?: string;
+  userId?: string;
   resourceKey?: string;
   walletAddress?: `0x${string}`;
   walletStatus?: "none" | "provisioning" | "ready" | "failed";
@@ -17,23 +17,9 @@ export interface AgentRequestContextValues {
   turnkeyDelegatedUserId?: string;
 }
 
-const SELF_RECIPIENT_ALIASES = new Set([
-  "me",
-  "myself",
-  "self",
-  "you",
-  "the user",
-  "owner",
-  "私",
-  "わたし",
-  "私に",
-  "わたしに",
-  "自分",
-  "自分に",
-  "自分自身",
-]);
+const SELF_RECIPIENT_ALIASES = new Set(["me", "myself", "self", "you", "the user", "owner"]);
 
-const CHAT_RECIPIENT_ALIASES = new Set(["this chat", "current chat", "here", "このチャット", "この会話", "ここ"]);
+const CHAT_RECIPIENT_ALIASES = new Set(["this chat", "current chat", "here"]);
 
 function cleanValue(value: string | undefined) {
   const trimmed = value?.trim();
@@ -67,9 +53,9 @@ export function createAgentRequestContext(values: AgentRequestContextValues) {
     requestContext.set("incomingText", incomingText);
   }
 
-  const appUserId = cleanValue(values.appUserId);
-  if (appUserId) {
-    requestContext.set("appUserId", appUserId);
+  const userId = cleanValue(values.userId);
+  if (userId) {
+    requestContext.set("userId", userId);
   }
 
   const resourceKey = cleanValue(values.resourceKey);
@@ -157,13 +143,13 @@ export function resolveRecipientAlias(recipient: string, requestContext?: Reques
   return trimmed;
 }
 
-export function getAppUserId(requestContext?: RequestContext): string {
-  const appUserId = requestContext?.get("appUserId");
-  if (typeof appUserId === "string" && appUserId.trim()) {
-    return appUserId.trim();
+export function getUserId(requestContext?: RequestContext): string {
+  const userId = requestContext?.get("userId");
+  if (typeof userId === "string" && userId.trim()) {
+    return userId.trim();
   }
 
-  throw new Error("Missing app user context");
+  throw new Error("Missing user context");
 }
 
 export function getIncomingText(requestContext?: RequestContext): string | undefined {

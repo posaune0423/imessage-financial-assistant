@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
-export const appUsersTable = sqliteTable(
+export const usersTable = sqliteTable(
   "app_users",
   {
     id: text("id").primaryKey(),
@@ -17,9 +17,9 @@ export const messagingIdentitiesTable = sqliteTable(
   "messaging_identities",
   {
     id: text("id").primaryKey(),
-    appUserId: text("app_user_id")
+    userId: text("app_user_id")
       .notNull()
-      .references(() => appUsersTable.id),
+      .references(() => usersTable.id),
     channel: text("channel").notNull(),
     identity: text("identity").notNull(),
     identityType: text("identity_type").notNull(),
@@ -32,9 +32,9 @@ export const appWalletsTable = sqliteTable(
   "app_wallets",
   {
     id: text("id").primaryKey(),
-    appUserId: text("app_user_id")
+    userId: text("app_user_id")
       .notNull()
-      .references(() => appUsersTable.id),
+      .references(() => usersTable.id),
     chain: text("chain").notNull(),
     address: text("address"),
     status: text("status").notNull(),
@@ -49,7 +49,7 @@ export const appWalletsTable = sqliteTable(
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },
-  (table) => [uniqueIndex("app_wallets_app_user_id_unique").on(table.appUserId)],
+  (table) => [uniqueIndex("app_wallets_app_user_id_unique").on(table.userId)],
 );
 
 export async function ensureSqliteSchema(db: { run: (statement: ReturnType<typeof sql>) => Promise<unknown> }) {

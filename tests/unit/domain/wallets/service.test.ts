@@ -6,14 +6,14 @@ import type { WalletRepository } from "../../../../src/repositories/interfaces/w
 
 const userContext: UserContext = {
   id: "user-1",
-  resourceKey: "app-user:user-1",
+  resourceKey: "user:user-1",
   sender: "+819012345678",
   wallet: null,
 };
 
 const readyWallet = {
   id: "wallet-1",
-  appUserId: "user-1",
+  userId: "user-1",
   chain: "ethereum",
   address: "0x1234567890abcdef1234567890abcdef12345678" as const,
   status: "ready" as const,
@@ -31,7 +31,7 @@ const readyWallet = {
 
 function createWalletRepository(wallet: AppWallet | null = readyWallet): WalletRepository {
   return {
-    findPrimaryWalletByAppUserId: vi.fn().mockResolvedValue(wallet),
+    findPrimaryWalletByUserId: vi.fn().mockResolvedValue(wallet),
     upsertPrimaryWallet: vi.fn(),
     updateWalletStatus: vi.fn(),
     updateSignerStatus: vi.fn(),

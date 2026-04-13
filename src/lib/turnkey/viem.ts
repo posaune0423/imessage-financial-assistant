@@ -10,10 +10,6 @@ export class TurnkeyViemAccountFactory implements TurnkeySignerClientFactory {
   constructor(private readonly config: TurnkeyConfig) {}
 
   async createSignerClient(wallet: AppWallet) {
-    if (!this.config.apiPublicKey || !this.config.apiPrivateKey) {
-      throw new Error("Turnkey signing is not configured");
-    }
-
     if (!wallet.turnkeyOrganizationId || !wallet.turnkeyAccountId) {
       throw new Error("Wallet is missing Turnkey linkage");
     }

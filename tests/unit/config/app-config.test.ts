@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { appConfig } from "../../../src/config";
+import { appConfig, createAppConfig } from "../../../src/config";
+import { env } from "../../../src/env";
 
 describe("appConfig", () => {
   it("maps env-derived runtime settings into typed config slices", () => {
@@ -16,5 +17,32 @@ describe("appConfig", () => {
     expect(appConfig.tools.web.braveSearch).toBeNull();
     expect(appConfig.mcp.timeoutMs).toBe(1_000);
     expect(appConfig.mcp.servers.allium).toBeNull();
+    expect(appConfig.turnkey).toEqual({
+      apiBaseUrl: "https://api.turnkey.com",
+      apiPublicKey: "test-turnkey-public-key",
+      apiPrivateKey: "test-turnkey-private-key",
+      organizationId: "test-turnkey-org",
+      delegatedKeySecretNamespace: "turnkey/delegated",
+    });
+    expect(appConfig.hyperliquid).toEqual({
+      network: "mainnet",
+      isTestnet: false,
+      apiUrl: "https://api.hyperliquid.xyz",
+      wsUrl: "wss://api.hyperliquid.xyz/ws",
+    });
+  });
+
+  it("derives Hyperliquid testnet endpoints from the network enum", () => {
+    const config = createAppConfig({
+      ...env,
+      HYPERLIQUID_NETWORK: "testnet",
+    });
+
+    expect(config.hyperliquid).toEqual({
+      network: "testnet",
+      isTestnet: true,
+      apiUrl: "https://api.hyperliquid-testnet.xyz",
+      wsUrl: "wss://api.hyperliquid-testnet.xyz/ws",
+    });
   });
 });

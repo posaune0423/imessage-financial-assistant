@@ -13,7 +13,7 @@ import { createWalletTools } from "../../../src/agents/tools/wallet";
 function createFakeServices() {
   const wallet = {
     id: "wallet-1",
-    appUserId: "user-1",
+    userId: "user-1",
     chain: "ethereum",
     address: "0x1234567890abcdef1234567890abcdef12345678" as const,
     status: "ready" as const,
@@ -37,7 +37,7 @@ function createFakeServices() {
     userContextResolver: {
       resolve: vi.fn().mockResolvedValue({
         id: "user-1",
-        resourceKey: "app-user:user-1",
+        resourceKey: "user:user-1",
         sender: "+819012345678",
         wallet,
       }),
@@ -47,18 +47,22 @@ function createFakeServices() {
     },
     hyperliquid: {
       getMarketSnapshot: vi.fn().mockResolvedValue({
+        network: "mainnet",
         timestamp: "2099-03-22T00:00:00.000Z",
         assets: [{ coin: "BTC", asset: 0, mid: "95000", szDecimals: 5, maxLeverage: 40 }],
       }),
       getUserSummary: vi.fn().mockResolvedValue({
+        network: "mainnet",
         address: wallet.address,
         summary: { marginSummary: { accountValue: "1000" } },
       }),
       getOpenOrders: vi.fn().mockResolvedValue({
+        network: "mainnet",
         address: wallet.address,
         orders: [{ oid: 1 }],
       }),
       getRecentFills: vi.fn().mockResolvedValue({
+        network: "mainnet",
         address: wallet.address,
         fills: [{ oid: 1 }],
       }),
@@ -655,7 +659,7 @@ describe("agent tools", () => {
     const requestContext = createAgentRequestContext({
       sender: "+819012345678",
       chatId: "chat-1",
-      appUserId: "user-1",
+      userId: "user-1",
     });
 
     await expect(executeTool(tools.wallet_get_profile, {}, requestContext)).resolves.toEqual({
@@ -680,7 +684,7 @@ describe("agent tools", () => {
     });
     const requestContext = createAgentRequestContext({
       sender: "+819012345678",
-      appUserId: "user-1",
+      userId: "user-1",
       incomingText: "BTC を 0.01 買って",
     });
 

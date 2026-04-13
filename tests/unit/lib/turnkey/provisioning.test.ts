@@ -7,7 +7,7 @@ import type { UpsertAppWalletInput, WalletRepository } from "../../../../src/rep
 
 const userContext: UserContext = {
   id: "user-1",
-  resourceKey: "app-user:user-1",
+  resourceKey: "user:user-1",
   sender: "+819012345678",
   wallet: null,
 };
@@ -27,7 +27,7 @@ function createWalletRepository(initialWallet: AppWallet | null = null) {
     wallet: initialWallet,
   };
 
-  const findPrimaryWalletByAppUserId = vi.fn(async () => state.wallet);
+  const findPrimaryWalletByUserId = vi.fn(async () => state.wallet);
   const upsertPrimaryWallet = vi.fn(async (input: UpsertAppWalletInput) => {
     state.wallet = {
       ...input,
@@ -35,7 +35,7 @@ function createWalletRepository(initialWallet: AppWallet | null = null) {
 
     return state.wallet;
   });
-  const updateWalletStatus = vi.fn(async (_appUserId: string, status: AppWallet["status"], updatedAt: string) => {
+  const updateWalletStatus = vi.fn(async (_userId: string, status: AppWallet["status"], updatedAt: string) => {
     if (!state.wallet) {
       return;
     }
@@ -47,7 +47,7 @@ function createWalletRepository(initialWallet: AppWallet | null = null) {
     };
   });
   const updateSignerStatus = vi.fn(
-    async (_appUserId: string, signerStatus: AppWallet["signerStatus"], updatedAt: string) => {
+    async (_userId: string, signerStatus: AppWallet["signerStatus"], updatedAt: string) => {
       if (!state.wallet) {
         return;
       }
@@ -61,7 +61,7 @@ function createWalletRepository(initialWallet: AppWallet | null = null) {
   );
 
   const repository: WalletRepository = {
-    findPrimaryWalletByAppUserId,
+    findPrimaryWalletByUserId,
     upsertPrimaryWallet,
     updateWalletStatus,
     updateSignerStatus,
@@ -71,7 +71,7 @@ function createWalletRepository(initialWallet: AppWallet | null = null) {
     repository,
     state,
     mocks: {
-      findPrimaryWalletByAppUserId,
+      findPrimaryWalletByUserId,
       upsertPrimaryWallet,
       updateWalletStatus,
       updateSignerStatus,
@@ -81,7 +81,7 @@ function createWalletRepository(initialWallet: AppWallet | null = null) {
 
 function createTurnkeyAdapter(overrides?: Partial<TurnkeyProvisioningAdapter>): TurnkeyProvisioningAdapter {
   return {
-    isConfigured: () => true,
+    validateAccess: async () => {},
     lookupSubOrganizationByPhone: async () => null,
     provisionSubOrganization: async () => linkage,
     bootstrapDelegatedSigner: async () => ({ signerStatus: "ready" as const }),
@@ -90,18 +90,20 @@ function createTurnkeyAdapter(overrides?: Partial<TurnkeyProvisioningAdapter>): 
 }
 
 describe("TurnkeyProvisioningService", () => {
-  it("marks the wallet failed and degraded when Turnkey is not configured", async () => {
+  it("marks the wallet failed and degraded when provisioning fails", async () => {
     const { repository, state, mocks } = createWalletRepository();
     const turnkey = createTurnkeyAdapter({
-      isConfigured: () => false,
+      provisionSubOrganization: async () => {
+        throw new Error("Turnkey provisioning failed");
+      },
     });
     const service = new TurnkeyProvisioningService(repository, turnkey);
 
-    await expect(service.ensurePrimaryWallet(userContext)).rejects.toThrow("Turnkey is not configured");
+    await expect(service.ensurePrimaryWallet(userContext)).rejects.toThrow("Turnkey provisioning failed");
 
     expect(mocks.upsertPrimaryWallet).toHaveBeenCalledWith(
       expect.objectContaining({
-        appUserId: "user-1",
+        userId: "user-1",
         status: "provisioning",
         signerStatus: "bootstrapping",
       }),
@@ -109,7 +111,7 @@ describe("TurnkeyProvisioningService", () => {
     expect(mocks.updateWalletStatus).toHaveBeenCalledWith("user-1", "failed", expect.any(String));
     expect(mocks.updateSignerStatus).toHaveBeenCalledWith("user-1", "degraded", expect.any(String));
     expect(state.wallet).toMatchObject({
-      appUserId: "user-1",
+      userId: "user-1",
       status: "failed",
       signerStatus: "degraded",
     });
@@ -137,7 +139,7 @@ describe("TurnkeyProvisioningService", () => {
     expect(provisionSubOrganization).not.toHaveBeenCalled();
     expect(bootstrapDelegatedSigner).toHaveBeenCalledWith(linkage);
     expect(wallet).toMatchObject({
-      appUserId: "user-1",
+      userId: "user-1",
       address: linkage.address,
       status: "ready",
       signerStatus: "ready",
@@ -165,7 +167,7 @@ describe("TurnkeyProvisioningService", () => {
 
     expect(provisionSubOrganization).toHaveBeenCalledWith({
       phoneNumber: "+819012345678",
-      appUserId: "user-1",
+      userId: "user-1",
     });
     expect(wallet).toMatchObject({
       status: "ready",

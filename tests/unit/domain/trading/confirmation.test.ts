@@ -18,15 +18,15 @@ describe("trade confirmation helpers", () => {
   it("matches explicit confirmation phrases but rejects vague confirmations", () => {
     const code = buildTradeConfirmationCode(["btc", "buy", "0.01"]);
 
-    expect(containsTradeConfirmation(`注文実行 ${code}`, code)).toBe(true);
     expect(containsTradeConfirmation(`confirm ${code}`, code)).toBe(true);
-    expect(containsTradeConfirmation("はい", code)).toBe(false);
+    expect(containsTradeConfirmation(`execute ${code}`, code)).toBe(true);
+    expect(containsTradeConfirmation("yes", code)).toBe(false);
     expect(containsTradeConfirmation(undefined, code)).toBe(false);
   });
 
   it("formats the execution instruction with the exact code", () => {
-    expect(createTradeConfirmationMessage("BTC を買います。", "abcd1234")).toBe(
-      "BTC を買います。\n実行する場合は「注文実行 abcd1234」と送ってください。",
+    expect(createTradeConfirmationMessage("Buy BTC.", "abcd1234")).toBe(
+      'Buy BTC.\nTo execute, reply with "confirm abcd1234".',
     );
   });
 });

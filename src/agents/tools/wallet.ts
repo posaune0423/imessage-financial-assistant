@@ -1,7 +1,7 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 
-import { getAppUserId } from "../request-context";
+import { getUserId } from "../request-context";
 import type { WalletService } from "../../domain/wallets/service";
 import type { UserContextResolver } from "../../domain/users/user-context";
 import type { TurnkeyProvisioningService } from "../../lib/turnkey/provisioning";
@@ -25,8 +25,8 @@ export function createWalletTools(deps: WalletToolDeps) {
         chain: z.string().nullable(),
       }),
       execute: async (_args, context) => {
-        const appUserId = getAppUserId(context.requestContext);
-        const wallet = await deps.wallets.getProfile(appUserId);
+        const userId = getUserId(context.requestContext);
+        const wallet = await deps.wallets.getProfile(userId);
 
         return {
           status: wallet?.status ?? "none",

@@ -15,7 +15,7 @@ export class TurnkeyProvisioningService implements TurnkeyProvisioningPort {
   ) {}
 
   async ensurePrimaryWallet(userContext: UserContext, options?: { force?: boolean }) {
-    const current = await this.wallets.findPrimaryWalletByAppUserId(userContext.id);
+    const current = await this.wallets.findPrimaryWalletByUserId(userContext.id);
     if (!options?.force && current?.status === "ready") {
       return current;
     }
@@ -25,7 +25,7 @@ export class TurnkeyProvisioningService implements TurnkeyProvisioningPort {
 
     await this.wallets.upsertPrimaryWallet({
       id: walletId,
-      appUserId: userContext.id,
+      userId: userContext.id,
       chain: current?.chain ?? "ethereum",
       address: current?.address ?? null,
       status: "provisioning",
@@ -41,19 +41,13 @@ export class TurnkeyProvisioningService implements TurnkeyProvisioningPort {
       updatedAt: startedAt,
     });
 
-    if (!this.turnkey.isConfigured()) {
-      await this.wallets.updateWalletStatus(userContext.id, "failed", nowIso());
-      await this.wallets.updateSignerStatus(userContext.id, "degraded", nowIso());
-      throw new Error("Turnkey is not configured");
-    }
-
     try {
       const existing = await this.turnkey.lookupSubOrganizationByPhone(userContext.sender);
       const linkage =
         existing ??
         (await this.turnkey.provisionSubOrganization({
           phoneNumber: userContext.sender,
-          appUserId: userContext.id,
+          userId: userContext.id,
         }));
       const bootstrap = await this.turnkey.bootstrapDelegatedSigner(linkage);
       const updatedAt = nowIso();
@@ -61,7 +55,7 @@ export class TurnkeyProvisioningService implements TurnkeyProvisioningPort {
       return this.wallets.upsertPrimaryWallet(
         this.createWalletRecord({
           id: walletId,
-          appUserId: userContext.id,
+          userId: userContext.id,
           linkage,
           signerStatus: bootstrap.signerStatus,
           createdAt: current?.createdAt ?? startedAt,
@@ -78,7 +72,7 @@ export class TurnkeyProvisioningService implements TurnkeyProvisioningPort {
 
   private createWalletRecord(args: {
     id: string;
-    appUserId: string;
+    userId: string;
     linkage: Awaited<ReturnType<TurnkeyProvisioningAdapter["provisionSubOrganization"]>>;
     signerStatus: UpsertAppWalletInput["signerStatus"];
     createdAt: string;
@@ -86,7 +80,7 @@ export class TurnkeyProvisioningService implements TurnkeyProvisioningPort {
   }): UpsertAppWalletInput {
     return {
       id: args.id,
-      appUserId: args.appUserId,
+      userId: args.userId,
       chain: "ethereum",
       address: args.linkage.address,
       status: "ready",

@@ -2,7 +2,7 @@ import type { AppWallet, SignerStatus, WalletStatus } from "../../domain/users/t
 
 export interface UpsertAppWalletInput {
   id: string;
-  appUserId: string;
+  userId: string;
   chain: string;
   address: `0x${string}` | null;
   status: WalletStatus;
@@ -19,8 +19,8 @@ export interface UpsertAppWalletInput {
 }
 
 export interface WalletRepository {
-  findPrimaryWalletByAppUserId(appUserId: string): Promise<AppWallet | null>;
+  findPrimaryWalletByUserId(userId: string): Promise<AppWallet | null>;
   upsertPrimaryWallet(input: UpsertAppWalletInput): Promise<AppWallet>;
-  updateWalletStatus(appUserId: string, status: WalletStatus, updatedAt: string): Promise<void>;
-  updateSignerStatus(appUserId: string, signerStatus: SignerStatus, updatedAt: string): Promise<void>;
+  updateWalletStatus(userId: string, status: WalletStatus, updatedAt: string): Promise<void>;
+  updateSignerStatus(userId: string, signerStatus: SignerStatus, updatedAt: string): Promise<void>;
 }

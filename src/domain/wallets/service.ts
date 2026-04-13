@@ -8,12 +8,12 @@ export class WalletService {
     private readonly provisioning: TurnkeyProvisioningService,
   ) {}
 
-  async getProfile(appUserId: string): Promise<AppWallet | null> {
-    return this.wallets.findPrimaryWalletByAppUserId(appUserId);
+  async getProfile(userId: string): Promise<AppWallet | null> {
+    return this.wallets.findPrimaryWalletByUserId(userId);
   }
 
   async ensurePrimaryWallet(userContext: UserContext, force = false): Promise<AppWallet> {
-    const existing = await this.wallets.findPrimaryWalletByAppUserId(userContext.id);
+    const existing = await this.wallets.findPrimaryWalletByUserId(userContext.id);
     if (!force && existing && existing.status === "ready") {
       return existing;
     }

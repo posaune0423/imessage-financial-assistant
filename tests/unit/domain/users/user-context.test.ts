@@ -1,36 +1,36 @@
 import { describe, expect, it } from "vitest";
 
 import { UserContextResolver } from "../../../../src/domain/users/user-context";
-import type { AppUser, MessagingIdentity } from "../../../../src/domain/users/types";
-import type { AppUserRepository } from "../../../../src/repositories/interfaces/app-user-repository";
+import type { User, MessagingIdentity } from "../../../../src/domain/users/types";
+import type { UserRepository } from "../../../../src/repositories/interfaces/user-repository";
 import type { WalletRepository } from "../../../../src/repositories/interfaces/wallet-repository";
 
 function createFakeRepositories() {
-  const users = new Map<string, AppUser>();
+  const userStore = new Map<string, User>();
   const identities: MessagingIdentity[] = [];
 
-  const appUsers: AppUserRepository = {
-    findById: async (id) => users.get(id) ?? null,
+  const users: UserRepository = {
+    findById: async (id) => userStore.get(id) ?? null,
     findByMessagingIdentity: async (channel, identity) => {
       const match = identities.find((item) => item.channel === channel && item.identity === identity);
-      return match ? (users.get(match.appUserId) ?? null) : null;
+      return match ? (userStore.get(match.userId) ?? null) : null;
     },
-    listMessagingIdentities: async (appUserId) => identities.filter((item) => item.appUserId === appUserId),
-    createAppUser: async (input) => {
-      const appUser: AppUser = {
+    listMessagingIdentities: async (userId) => identities.filter((item) => item.userId === userId),
+    createUser: async (input) => {
+      const user: User = {
         id: input.id,
         resourceKey: input.resourceKey,
         displayName: input.displayName ?? null,
         createdAt: input.createdAt,
         updatedAt: input.updatedAt,
       };
-      users.set(appUser.id, appUser);
-      return appUser;
+      userStore.set(user.id, user);
+      return user;
     },
     createMessagingIdentity: async (input) => {
       const identity: MessagingIdentity = {
         id: input.id,
-        appUserId: input.appUserId,
+        userId: input.userId,
         channel: input.channel,
         identity: input.identity,
         identityType: input.identityType,
@@ -43,7 +43,7 @@ function createFakeRepositories() {
   };
 
   const wallets: WalletRepository = {
-    findPrimaryWalletByAppUserId: async () => null,
+    findPrimaryWalletByUserId: async () => null,
     upsertPrimaryWallet: async () => {
       throw new Error("not used");
     },
@@ -52,16 +52,16 @@ function createFakeRepositories() {
   };
 
   return {
-    appUsers,
+    users,
     wallets,
     identities,
   };
 }
 
 describe("UserContextResolver", () => {
-  it("creates a new app user with stable resource key and binds sender/chat identities", async () => {
+  it("creates a new user with stable resource key and binds sender/chat identities", async () => {
     const repos = createFakeRepositories();
-    const resolver = new UserContextResolver(repos.appUsers, repos.wallets);
+    const resolver = new UserContextResolver(repos.users, repos.wallets);
 
     const context = await resolver.resolve({
       sender: "+81 90-1234-5678",
@@ -70,14 +70,14 @@ describe("UserContextResolver", () => {
     });
 
     expect(context.sender).toBe("+819012345678");
-    expect(context.resourceKey).toMatch(/^app-user:/);
+    expect(context.resourceKey).toMatch(/^user:/);
     expect(repos.identities).toHaveLength(2);
     expect(repos.identities.map((item) => item.identity).toSorted()).toEqual(["+819012345678", "chat-1"]);
   });
 
-  it("reuses the same app user when the sender identity already exists", async () => {
+  it("reuses the same user when the sender identity already exists", async () => {
     const repos = createFakeRepositories();
-    const resolver = new UserContextResolver(repos.appUsers, repos.wallets);
+    const resolver = new UserContextResolver(repos.users, repos.wallets);
 
     const first = await resolver.resolve({
       sender: "+819012345678",

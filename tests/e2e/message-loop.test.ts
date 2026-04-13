@@ -12,11 +12,11 @@ import { logger } from "../../src/utils/logger";
 function createReadyUserContext(sender = "+819012345678"): UserContext {
   return {
     id: "user-1",
-    resourceKey: "app-user:user-1",
+    resourceKey: "user:user-1",
     sender,
     wallet: {
       id: "wallet-1",
-      appUserId: "user-1",
+      userId: "user-1",
       chain: "ethereum",
       address: "0x1234567890abcdef1234567890abcdef12345678",
       status: "ready",
@@ -51,8 +51,8 @@ function createHandlerDeps(overrides?: {
 describe("message loop", () => {
   const ownerPhone = "+819012345678";
 
-  it("routes a normal direct message through the agent with app-user resource keys", async () => {
-    const generate = vi.fn().mockResolvedValue({ text: "了解しました。" });
+  it("routes a normal direct message through the agent with user resource keys", async () => {
+    const generate = vi.fn().mockResolvedValue({ text: "Understood." });
     const sendMessage = vi.fn();
     const resolveToolsets = vi.fn().mockResolvedValue({});
     const deps = createHandlerDeps();
@@ -62,17 +62,18 @@ describe("message loop", () => {
       sendMessage,
       userContextResolver: deps.userContextResolver as never,
       turnkeyProvisioning: deps.turnkeyProvisioning as never,
+      hyperliquidNetwork: "mainnet",
       resolveToolsets,
       maxSteps: 3,
     });
 
-    await handler({ sender: "+819012345678", text: "こんにちは" });
+    await handler({ sender: "+819012345678", text: "hello" });
 
     expect(resolveToolsets).not.toHaveBeenCalled();
     expect(generate).toHaveBeenCalledWith(
-      "こんにちは",
+      "hello",
       expect.objectContaining({
-        memory: { resource: "app-user:user-1", thread: "default" },
+        memory: { resource: "user:user-1", thread: "default" },
         maxSteps: 3,
         toolsets: undefined,
         requestContext: expect.anything(),
@@ -83,13 +84,15 @@ describe("message loop", () => {
     expect(deps.userContextResolver.resolve).toHaveBeenCalledTimes(2);
     expect(requestContext?.get("sender")).toBe("+819012345678");
     expect(requestContext?.get("ownerPhone")).toBe(ownerPhone);
-    expect(requestContext?.get("appUserId")).toBe("user-1");
-    expect(requestContext?.get("resourceKey")).toBe("app-user:user-1");
-    expect(sendMessage).toHaveBeenCalledWith("+819012345678", "了解しました。");
+    expect(requestContext?.get("userId")).toBe("user-1");
+    expect(requestContext?.get("resourceKey")).toBe("user:user-1");
+    expect(sendMessage).toHaveBeenCalledWith("+819012345678", "Understood.");
   });
 
-  it("uses chatId as the conversation key and reply target when available", async () => {
-    const generate = vi.fn().mockResolvedValue({ text: "了解しました。" });
+  it("sends wallet addresses as standalone messages so they are easy to copy", async () => {
+    const generate = vi.fn().mockResolvedValue({
+      text: "Wallet address: 0x1234567890abcdef1234567890abcdef12345678\nFund it with USDC on Arbitrum.",
+    });
     const sendMessage = vi.fn();
     const deps = createHandlerDeps();
     const handler = createDirectMessageHandler({
@@ -98,22 +101,44 @@ describe("message loop", () => {
       sendMessage,
       userContextResolver: deps.userContextResolver as never,
       turnkeyProvisioning: deps.turnkeyProvisioning as never,
+      hyperliquidNetwork: "mainnet",
       maxSteps: 3,
     });
 
-    await handler({ sender: "090-1234-5678", chatId: "chat-1", text: "こんにちは" });
+    await handler({ sender: "+819012345678", text: "show my wallet address" });
+
+    expect(sendMessage).toHaveBeenNthCalledWith(1, "+819012345678", "Wallet address:");
+    expect(sendMessage).toHaveBeenNthCalledWith(2, "+819012345678", "0x1234567890abcdef1234567890abcdef12345678");
+    expect(sendMessage).toHaveBeenNthCalledWith(3, "+819012345678", "Fund it with USDC on Arbitrum.");
+  });
+
+  it("uses chatId as the conversation key and reply target when available", async () => {
+    const generate = vi.fn().mockResolvedValue({ text: "Understood." });
+    const sendMessage = vi.fn();
+    const deps = createHandlerDeps();
+    const handler = createDirectMessageHandler({
+      ownerPhone,
+      agent: { generate } as never,
+      sendMessage,
+      userContextResolver: deps.userContextResolver as never,
+      turnkeyProvisioning: deps.turnkeyProvisioning as never,
+      hyperliquidNetwork: "mainnet",
+      maxSteps: 3,
+    });
+
+    await handler({ sender: "090-1234-5678", chatId: "chat-1", text: "hello" });
 
     expect(generate).toHaveBeenCalledWith(
-      "こんにちは",
+      "hello",
       expect.objectContaining({
-        memory: { resource: "app-user:user-1", thread: "default" },
+        memory: { resource: "user:user-1", thread: "default" },
       }),
     );
-    expect(sendMessage).toHaveBeenCalledWith("chat-1", "了解しました。");
+    expect(sendMessage).toHaveBeenCalledWith("chat-1", "Understood.");
   });
 
   it("accepts non-owner senders instead of filtering them out", async () => {
-    const generate = vi.fn().mockResolvedValue({ text: "確認しました。" });
+    const generate = vi.fn().mockResolvedValue({ text: "Confirmed." });
     const sendMessage = vi.fn();
     const deps = createHandlerDeps({
       resolve: vi.fn().mockResolvedValue(createReadyUserContext("+819099999999")),
@@ -124,17 +149,18 @@ describe("message loop", () => {
       sendMessage,
       userContextResolver: deps.userContextResolver as never,
       turnkeyProvisioning: deps.turnkeyProvisioning as never,
+      hyperliquidNetwork: "mainnet",
       maxSteps: 3,
     });
 
-    await handler({ sender: "+819099999999", text: "こんにちは" });
+    await handler({ sender: "+819099999999", text: "hello" });
 
     expect(generate).toHaveBeenCalledTimes(1);
-    expect(sendMessage).toHaveBeenCalledWith("+819099999999", "確認しました。");
+    expect(sendMessage).toHaveBeenCalledWith("+819099999999", "Confirmed.");
   });
 
   it("resolves MCP toolsets only for likely MCP-heavy requests", async () => {
-    const generate = vi.fn().mockResolvedValue({ text: "残高を確認します。" });
+    const generate = vi.fn().mockResolvedValue({ text: "Checking balances." });
     const sendMessage = vi.fn();
     const resolveToolsets = vi.fn().mockResolvedValue({ allium: {} });
     const deps = createHandlerDeps();
@@ -144,6 +170,7 @@ describe("message loop", () => {
       sendMessage,
       userContextResolver: deps.userContextResolver as never,
       turnkeyProvisioning: deps.turnkeyProvisioning as never,
+      hyperliquidNetwork: "mainnet",
       resolveToolsets,
       maxSteps: 3,
     });
@@ -154,7 +181,7 @@ describe("message loop", () => {
     expect(generate).toHaveBeenCalledWith(
       "wallet balanceを見て",
       expect.objectContaining({
-        memory: { resource: "app-user:user-1", thread: "default" },
+        memory: { resource: "user:user-1", thread: "default" },
         maxSteps: 3,
         toolsets: { allium: {} },
         requestContext: expect.anything(),
@@ -164,7 +191,7 @@ describe("message loop", () => {
   });
 
   it("routes scheduling requests through the agent instead of bypassing it", async () => {
-    const generate = vi.fn().mockResolvedValue({ text: "明日9:00にリマインダーを設定しました。" });
+    const generate = vi.fn().mockResolvedValue({ text: "I set a reminder for tomorrow at 9:00." });
     const sendMessage = vi.fn();
     const deps = createHandlerDeps();
     const handler = createDirectMessageHandler({
@@ -173,13 +200,14 @@ describe("message loop", () => {
       sendMessage,
       userContextResolver: deps.userContextResolver as never,
       turnkeyProvisioning: deps.turnkeyProvisioning as never,
+      hyperliquidNetwork: "mainnet",
       maxSteps: 3,
     });
 
-    await handler({ sender: "+819012345678", text: "1分後に私に話しかけてください" });
+    await handler({ sender: "+819012345678", text: "Remind me in one minute." });
 
     expect(generate).toHaveBeenCalledTimes(1);
-    expect(sendMessage).toHaveBeenCalledWith("+819012345678", "明日9:00にリマインダーを設定しました。");
+    expect(sendMessage).toHaveBeenCalledWith("+819012345678", "I set a reminder for tomorrow at 9:00.");
   });
 
   it("logs tool steps and sends one progress message before the final reply", async () => {
@@ -207,7 +235,7 @@ describe("message loop", () => {
         ],
       });
 
-      return { text: "調べ終わりました。" };
+      return { text: "Done checking." };
     });
     const deps = createHandlerDeps();
     const handler = createDirectMessageHandler({
@@ -216,13 +244,14 @@ describe("message loop", () => {
       sendMessage,
       userContextResolver: deps.userContextResolver as never,
       turnkeyProvisioning: deps.turnkeyProvisioning as never,
+      hyperliquidNetwork: "mainnet",
       maxSteps: 3,
     });
 
-    await handler({ sender: "+819012345678", text: "最新情報を見て" });
+    await handler({ sender: "+819012345678", text: "Check the latest updates." });
 
-    expect(sendMessage).toHaveBeenNthCalledWith(1, "+819012345678", "確認しながら進めています。少し待ってください。");
-    expect(sendMessage).toHaveBeenNthCalledWith(2, "+819012345678", "調べ終わりました。");
+    expect(sendMessage).toHaveBeenNthCalledWith(1, "+819012345678", "I am checking that now. Please wait a moment.");
+    expect(sendMessage).toHaveBeenNthCalledWith(2, "+819012345678", "Done checking.");
     expect(infoSpy).toHaveBeenCalledWith(expect.stringContaining("[agent] tool-call id=tool-call-1 name=brave-search"));
     expect(infoSpy).toHaveBeenCalledWith(
       expect.stringContaining("[agent] tool-result id=tool-call-1 name=brave-search status=ok"),
@@ -249,7 +278,7 @@ describe("message loop", () => {
         ],
       });
 
-      return { text: "箱根は晴れそうです。" };
+      return { text: "It looks sunny in Hakone." };
     });
     const deps = createHandlerDeps();
     const handler = createDirectMessageHandler({
@@ -258,10 +287,11 @@ describe("message loop", () => {
       sendMessage,
       userContextResolver: deps.userContextResolver as never,
       turnkeyProvisioning: deps.turnkeyProvisioning as never,
+      hyperliquidNetwork: "mainnet",
       maxSteps: 3,
     });
 
-    await handler({ sender: "+819012345678", text: "明日の箱根の天気は？" });
+    await handler({ sender: "+819012345678", text: "What is the weather in Hakone tomorrow?" });
 
     expect(infoSpy).toHaveBeenCalledWith(
       expect.stringContaining(
@@ -289,7 +319,7 @@ describe("message loop", () => {
         ],
       });
 
-      return { text: "覚えておきます。" };
+      return { text: "I will remember that." };
     });
     const handler = createDirectMessageHandler({
       ownerPhone,
@@ -297,13 +327,14 @@ describe("message loop", () => {
       sendMessage,
       userContextResolver: deps.userContextResolver as never,
       turnkeyProvisioning: deps.turnkeyProvisioning as never,
+      hyperliquidNetwork: "mainnet",
       maxSteps: 3,
     });
 
-    await handler({ sender: "+819012345678", text: "これ覚えておいて" });
+    await handler({ sender: "+819012345678", text: "Remember this." });
 
     expect(sendMessage).toHaveBeenCalledTimes(1);
-    expect(sendMessage).toHaveBeenCalledWith("+819012345678", "覚えておきます。");
+    expect(sendMessage).toHaveBeenCalledWith("+819012345678", "I will remember that.");
   });
 
   it("sends a short fallback reply on Anthropic rate limit errors", async () => {
@@ -321,19 +352,20 @@ describe("message loop", () => {
       sendMessage,
       userContextResolver: deps.userContextResolver as never,
       turnkeyProvisioning: deps.turnkeyProvisioning as never,
+      hyperliquidNetwork: "mainnet",
       maxSteps: 3,
     });
 
-    await handler({ sender: "+819012345678", text: "こんにちは" });
+    await handler({ sender: "+819012345678", text: "hello" });
 
     expect(sendMessage).toHaveBeenCalledWith(
       "+819012345678",
-      "今少し混み合っています。23秒ほど待ってからもう一度送ってください。",
+      "Things are busy right now. Please try again in about 23 seconds.",
     );
   });
 
-  it("auto-provisions a wallet on first message when the user has none", async () => {
-    const generate = vi.fn().mockResolvedValue({ text: "wallet を準備しました。" });
+  it("auto-provisions a wallet on first message and returns onboarding instructions", async () => {
+    const generate = vi.fn().mockResolvedValue({ text: "Your wallet is ready." });
     const sendMessage = vi.fn();
     const resolve = vi
       .fn()
@@ -353,17 +385,73 @@ describe("message loop", () => {
       sendMessage,
       userContextResolver: deps.userContextResolver as never,
       turnkeyProvisioning: deps.turnkeyProvisioning as never,
+      hyperliquidNetwork: "mainnet",
       maxSteps: 3,
     });
 
-    await handler({ sender: "+819012345678", text: "はじめまして" });
+    await handler({ sender: "+819012345678", text: "hi" });
 
     expect(ensurePrimaryWallet).toHaveBeenCalledTimes(1);
-    expect(generate).toHaveBeenCalledWith(
-      "はじめまして",
-      expect.objectContaining({
-        memory: { resource: "app-user:user-1", thread: "default" },
-      }),
+    expect(generate).not.toHaveBeenCalled();
+    expect(sendMessage).toHaveBeenNthCalledWith(
+      1,
+      "+819012345678",
+      ["Your wallet is ready.", "Deposit address:"].join("\n"),
+    );
+    expect(sendMessage).toHaveBeenNthCalledWith(2, "+819012345678", "0x1234567890abcdef1234567890abcdef12345678");
+    expect(sendMessage).toHaveBeenNthCalledWith(
+      3,
+      "+819012345678",
+      [
+        "Please deposit USDC to this address. Arbitrum is the default funding route.",
+        'After funding, you can say things like "show my portfolio", "show BTC market data", or "buy 0.01 BTC".',
+      ].join("\n"),
+    );
+  });
+
+  it("returns testnet-safe onboarding instructions when Hyperliquid testnet mode is enabled", async () => {
+    const generate = vi.fn().mockResolvedValue({ text: "Your testnet wallet is ready." });
+    const sendMessage = vi.fn();
+    const resolve = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ...createReadyUserContext(),
+        wallet: null,
+      })
+      .mockResolvedValueOnce(createReadyUserContext());
+    const ensurePrimaryWallet = vi.fn().mockResolvedValue(createReadyUserContext().wallet);
+    const deps = createHandlerDeps({
+      resolve,
+      ensurePrimaryWallet,
+    });
+    const handler = createDirectMessageHandler({
+      ownerPhone,
+      agent: { generate } as never,
+      sendMessage,
+      userContextResolver: deps.userContextResolver as never,
+      turnkeyProvisioning: deps.turnkeyProvisioning as never,
+      hyperliquidNetwork: "testnet",
+      maxSteps: 3,
+    });
+
+    await handler({ sender: "+819012345678", text: "hi" });
+
+    expect(ensurePrimaryWallet).toHaveBeenCalledTimes(1);
+    expect(generate).not.toHaveBeenCalled();
+    expect(sendMessage).toHaveBeenNthCalledWith(
+      1,
+      "+819012345678",
+      ["Your testnet wallet is ready.", "Deposit address:"].join("\n"),
+    );
+    expect(sendMessage).toHaveBeenNthCalledWith(2, "+819012345678", "0x1234567890abcdef1234567890abcdef12345678");
+    expect(sendMessage).toHaveBeenNthCalledWith(
+      3,
+      "+819012345678",
+      [
+        "Fund this wallet with testnet USDC before trading on Hyperliquid testnet.",
+        "If you need testnet funds, use the Hyperliquid testnet faucet at https://app.hyperliquid-testnet.xyz/drip.",
+        'After funding, you can say things like "show my portfolio", "show BTC market data", or "buy 0.01 BTC".',
+      ].join("\n"),
     );
   });
 });
@@ -371,7 +459,7 @@ describe("message loop", () => {
 describe("direct message helpers", () => {
   it("detects likely MCP requests from the message text", () => {
     expect(shouldResolveMcpToolsets("wallet balanceを見て")).toBe(true);
-    expect(shouldResolveMcpToolsets("こんにちは")).toBe(false);
+    expect(shouldResolveMcpToolsets("hello")).toBe(false);
   });
 
   it("creates a retry message for rate limits", () => {
@@ -380,7 +468,7 @@ describe("direct message helpers", () => {
         statusCode: 429,
         responseHeaders: { "retry-after": "12" },
       }),
-    ).toBe("今少し混み合っています。12秒ほど待ってからもう一度送ってください。");
+    ).toBe("Things are busy right now. Please try again in about 12 seconds.");
   });
 
   it("logs scheduler and reminder lifecycle events", () => {

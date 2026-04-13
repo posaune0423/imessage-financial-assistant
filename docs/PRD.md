@@ -1,146 +1,133 @@
-# PRD — iMessage × Mastra General Agent Template
+# PRD — iMessage-First Hyperliquid Trading Agent
 
-**Version**: 1.0  
-**Date**: 2026-03-21  
-**Status**: Draft
+**Version**: 2.0  
+**Date**: 2026-04-13  
+**Status**: Active draft
 
----
+## Product Summary
 
-## 1. What We Are Building
+This product lets a general user interact with Hyperliquid through iMessage.
 
-iMessage を UI として使う **汎用エージェントテンプレート**。  
-ユーザーは iPhone/Mac から普通に iMessage を送ると AI が返信する。  
-エージェントは会話記憶を持ち、ユーザーが何もしていなくても定期的にバックグラウンドで動き続ける。
+The user experience should feel simple:
 
-**技術スタック**
+- send a natural-language message in iMessage
+- let the agent understand intent
+- provision or reuse the user's wallet automatically
+- read market or account state when asked
+- require explicit confirmation before any signed trading action
 
-| レイヤー  | ライブラリ                          | 役割                 |
-| --------- | ----------------------------------- | -------------------- |
-| Transport | `@photon-ai/imessage-kit`           | iMessage の送受信    |
-| Agent     | `@mastra/core`                      | LLM エージェント実行 |
-| Memory    | `@mastra/memory` + `@mastra/libsql` | 会話記憶の永続化     |
-| Runtime   | Bun + TypeScript                    | 実行環境             |
+The system is built around four core pieces:
 
----
+- `@photon-ai/imessage-kit` as the iMessage transport
+- `@mastra/core` as the agent runtime
+- `Turnkey` for wallet provisioning and signing infrastructure
+- `Hyperliquid` for trading and account state
 
-## 2. Why
+## Problem
 
-AI エージェントの典型的な問題は「チャット UI を開かないと何も起きない」こと。
+Crypto trading tools are still too fragmented for a normal user:
 
-このテンプレートを使うと：
+- wallet setup is separate from the chat surface
+- account state lives in one UI and execution in another
+- signing flows are often too low-level for non-technical users
+- most agent demos still assume a web UI instead of a native messaging interface
 
-- **慣れた UI**: 新しいアプリ不要、iMessage で使える
-- **記憶あり**: 先週の話を覚えている
-- **プロアクティブ**: 何か起きたら向こうから連絡してくる
+This product collapses those steps into a single iMessage conversation while keeping explicit confirmation on any signed action.
 
----
+## Target Users
 
-## 3. 対象ユーザー
+### Primary
 
-**一次ターゲット**: 自分用 AI アシスタントを作りたい開発者  
-このテンプレートを fork して自分のユースケースに拡張する。
+- general users who want a simple chat interface for Hyperliquid access
+- users who are comfortable sending plain-text instructions but do not want to manage a custom trading UI
 
----
+### Secondary
 
-## 4. コア機能（P0）
+- builders maintaining or extending the trading-agent runtime
+- developers experimenting with iMessage-native agent workflows for wallet-aware products
 
-### 4.1 iMessage で対話できる
+## Product Principles
 
-```
-User → [iMessage DM] → Agent → [iMessage DM] → User
-```
+- `iMessage-first`: the chat surface is the product interface, not a fallback transport
+- `wallet-light UX`: wallet creation should happen automatically when the app can safely do it
+- `plain-text clarity`: every reply must work well inside iMessage
+- `agent orchestration, not hidden magic`: reads can be direct, writes must be explicit
+- `source of truth in app storage`: user and wallet state must come from the app DB and tool outputs, not conversation memory
 
-- `sdk.startWatching({ onDirectMessage })` でメッセージを受信
-- `agent.generate(text, { memory })` で応答を生成
-- `sdk.send(sender, reply)` で返信
-- 自分自身のメッセージには反応しない（`isFromMe: false` でフィルタ）
-- `OWNER_PHONE` を設定した場合はその番号からのメッセージのみ受け付ける
+## Core User Journey
 
-### 4.2 会話を記憶する
+1. A user sends a direct message in iMessage.
+2. The app resolves `sender` and `chatId` into a stable user.
+3. If the user has no primary wallet, the app provisions one through Turnkey.
+4. The Mastra agent receives the request with the user's wallet and resource context.
+5. For market or account reads, the agent responds with the relevant Hyperliquid data.
+6. For signed actions, the agent returns a compact execution summary and a deterministic confirmation code.
+7. The action is submitted only after the user sends the explicit confirmation code.
 
-- `resource` = 送信者の電話番号（ユーザー識別子）
-- `thread` = `"default"`（メインの会話スレッド）
-- 直近 20 メッセージの履歴を context に含める
-- Working Memory でユーザー名・好みなどを永続保持する
-- DB は `./data/agent.db`（LibSQL/SQLite ファイル）
+## P0 Requirements
 
-### 4.3 Heartbeat で自律的に動く
+### 1. iMessage as the primary interface
 
-- 設定した間隔（デフォルト 60 分）でエージェントが定期チェックを走らせる
-- `HEARTBEAT.md` に書いたチェックリストを読んでエージェントのプロンプトに渡す
-- **何もなければ `HEARTBEAT_OK` とだけ返す → メッセージを送らない（サイレント）**
-- 何かあれば `OWNER_PHONE` に iMessage を送る
-- アクティブ時間帯（デフォルト `08:00-22:00`）以外はスキップ
+- inbound messages come from Photon on macOS
+- the agent replies in iMessage-safe text with simple inline emphasis allowed when it materially improves readability
+- the system supports normal direct-message interaction without a separate web app
 
----
+### 2. Stable user identity resolution
 
-## 5. 拡張機能（P1）
+- every inbound request resolves to an user before agent execution
+- the app supports multiple users by mapping `sender` / `chatId` to a stable `resourceKey`
 
-### 5.1 Built-in Tools
+### 3. Automatic Turnkey wallet provisioning
 
-エージェントが使えるツールを最初から同梱する：
+- first contact should create or reuse a primary wallet
+- wallet linkage must be persisted in the app DB
+- runtime startup must fail fast when required Turnkey server credentials are absent
 
-| Tool ID        | 説明                                       |
-| -------------- | ------------------------------------------ |
-| `get-datetime` | 現在日時・タイムゾーンを返す               |
-| `send-message` | エージェントが能動的に iMessage を送信する |
-| `set-reminder` | Heartbeat state にリマインダーを保存する   |
-| `web-search`   | Web 検索（スタブ。API キーがあれば動く）   |
+### 4. Hyperliquid read access
 
-### 5.2 Cron ワークフロー（スタブ）
+- the agent can inspect market snapshots
+- the agent can inspect the current user's account summary, open orders, and recent fills
 
-- Mastra Workflow の `cron` プロパティで定期タスクのスタブを同梱
-- デフォルト: 毎朝 9 時に日次サマリーを生成して送信するワークフロー
-- Inngest を使う場合はそのまま接続できる設計
+### 5. Hyperliquid write access with confirmation gating
 
----
+- place order
+- cancel order
+- modify order
+- update leverage
+- every write action requires an explicit confirmation code in chat
 
-## 6. 対象外
+### 6. Per-user memory
 
-- グループチャット対応
-- マルチユーザー・マルチテナント
-- Web UI / ダッシュボード
-- 本番向け高可用性構成
-- Privy ウォレット・オンチェーン機能
+- conversation memory must remain scoped to the user, not to raw phone formatting
+- working memory may assist the agent, but the DB remains the source of truth for wallet state
 
----
+## P1 Requirements
 
-## 7. 環境変数
+- richer account reporting and portfolio summaries
+- more explicit owner / operator workflows for proactive alerts
+- deeper onchain context through optional MCP toolsets such as Allium
+- better recovery and ownership-verification flows for higher-risk actions
 
-```bash
-# 必須
-ANTHROPIC_API_KEY=sk-ant-...
-OWNER_PHONE=+819012345678         # エージェントが対話・通知する電話番号
+## Non-Goals
 
-# 任意（デフォルト値あり）
-HEARTBEAT_INTERVAL_MS=3600000     # 1時間
-HEARTBEAT_ACTIVE_START=08:00
-HEARTBEAT_ACTIVE_END=22:00
-DATABASE_URL=file:./data/agent.db
-```
+- a generic agent starter template
+- a browser-based frontend
+- a multi-process exchange execution platform
+- third-party wallet import
+- strategy automation without explicit product design for safety and controls
 
----
+## Success Criteria
 
-## 8. 完了基準（Definition of Done）
+- a first-time user can send an iMessage and receive a wallet-backed response without manual wallet setup
+- the same user is resolved to the same user and wallet context across later messages
+- Hyperliquid read requests return data grounded in tools rather than guessed responses
+- Hyperliquid write requests never execute on vague confirmation such as "ok" or "yes"
+- docs and implementation both describe the repository as a trading agent, not as a generic assistant template
 
-以下が全て満たされたらテンプレートとして完成：
+## Reference
 
-- [ ] iMessage を送ると 10 秒以内に返信が来る
-- [ ] 2 回目の会話で 1 回目の内容を参照できる
-- [ ] `HEARTBEAT_OK` のときは iMessage が飛ばない
-- [ ] 何かある heartbeat は iMessage に届く
-- [ ] `bun run dev` 一発で起動する
-- [ ] `bun run typecheck` がエラーゼロ
-- [ ] `.env.example`・`HEARTBEAT.md`・`SOUL.md` が同梱されている
+For the deeper architecture and implementation rationale, see:
 
----
-
-## 9. 開発フェーズ
-
-```
-Phase 1 (Day 1-2)  プロジェクトセットアップ + iMessage ↔ Agent 往復
-Phase 2 (Day 3-4)  Memory 永続化 + Working Memory
-Phase 3 (Day 5-6)  Heartbeat エンジン
-Phase 4 (Day 7)    Built-in Tools + Cron スタブ
-Phase 5 (Day 8)    README + 動作確認 + ドキュメント整備
-```
+- [DESIGN.md](./DESIGN.md)
+- [TECH.md](./TECH.md)
+- [specs/issue-001-turnkey-hyperliquid-agent-design.md](./specs/issue-001-turnkey-hyperliquid-agent-design.md)

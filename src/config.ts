@@ -1,5 +1,18 @@
 import { env } from "./env";
 
+export type HyperliquidNetwork = "mainnet" | "testnet";
+
+const HYPERLIQUID_ENDPOINTS = {
+  mainnet: {
+    apiUrl: "https://api.hyperliquid.xyz",
+    wsUrl: "wss://api.hyperliquid.xyz/ws",
+  },
+  testnet: {
+    apiUrl: "https://api.hyperliquid-testnet.xyz",
+    wsUrl: "wss://api.hyperliquid-testnet.xyz/ws",
+  },
+} as const satisfies Record<HyperliquidNetwork, { apiUrl: string; wsUrl: string }>;
+
 const AGENT_AUTONOMY_DEFAULTS = {
   maxSteps: 5,
   maxOutputTokens: 1_024,
@@ -57,16 +70,17 @@ export interface McpConfig {
 
 export interface TurnkeyConfig {
   apiBaseUrl: string;
-  apiPublicKey: string | null;
-  apiPrivateKey: string | null;
-  organizationId: string | null;
+  apiPublicKey: string;
+  apiPrivateKey: string;
+  organizationId: string;
   delegatedKeySecretNamespace: string;
 }
 
 export interface HyperliquidConfig {
+  network: HyperliquidNetwork;
+  isTestnet: boolean;
   apiUrl: string;
   wsUrl: string;
-  signatureChainId: number | null;
 }
 
 export interface AppConfig {
@@ -85,6 +99,8 @@ export interface AppConfig {
 }
 
 export function createAppConfig(source = env): AppConfig {
+  const hyperliquidEndpoints = HYPERLIQUID_ENDPOINTS[source.HYPERLIQUID_NETWORK];
+
   return {
     ownerPhone: source.OWNER_PHONE,
     logLevel: source.LOG_LEVEL,
@@ -124,15 +140,16 @@ export function createAppConfig(source = env): AppConfig {
     },
     turnkey: {
       apiBaseUrl: source.TURNKEY_API_BASE_URL,
-      apiPublicKey: source.TURNKEY_API_PUBLIC_KEY ?? null,
-      apiPrivateKey: source.TURNKEY_API_PRIVATE_KEY ?? null,
-      organizationId: source.TURNKEY_ORGANIZATION_ID ?? null,
+      apiPublicKey: source.TURNKEY_API_PUBLIC_KEY,
+      apiPrivateKey: source.TURNKEY_API_PRIVATE_KEY,
+      organizationId: source.TURNKEY_ORGANIZATION_ID,
       delegatedKeySecretNamespace: source.TURNKEY_DELEGATED_KEY_SECRET_NAMESPACE,
     },
     hyperliquid: {
-      apiUrl: source.HYPERLIQUID_API_URL,
-      wsUrl: source.HYPERLIQUID_WS_URL,
-      signatureChainId: source.HYPERLIQUID_SIGNATURE_CHAIN_ID ?? null,
+      network: source.HYPERLIQUID_NETWORK,
+      isTestnet: source.HYPERLIQUID_NETWORK === "testnet",
+      apiUrl: hyperliquidEndpoints.apiUrl,
+      wsUrl: hyperliquidEndpoints.wsUrl,
     },
   };
 }

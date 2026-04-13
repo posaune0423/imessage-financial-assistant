@@ -28,7 +28,7 @@ function toSignerStatus(value: string): AppWallet["signerStatus"] {
 function mapAppWallet(row: typeof appWalletsTable.$inferSelect): AppWallet {
   return {
     id: row.id,
-    appUserId: row.appUserId,
+    userId: row.userId,
     chain: row.chain,
     address: row.address && isHexAddress(row.address) ? row.address : null,
     status: toWalletStatus(row.status),
@@ -48,9 +48,9 @@ function mapAppWallet(row: typeof appWalletsTable.$inferSelect): AppWallet {
 export class SqliteWalletRepository implements WalletRepository {
   constructor(private readonly context: SqliteRepositoryContext) {}
 
-  async findPrimaryWalletByAppUserId(appUserId: string): Promise<AppWallet | null> {
+  async findPrimaryWalletByUserId(userId: string): Promise<AppWallet | null> {
     const row = await this.context.db.query.appWalletsTable.findFirst({
-      where: eq(appWalletsTable.appUserId, appUserId),
+      where: eq(appWalletsTable.userId, userId),
     });
     return row ? mapAppWallet(row) : null;
   }
@@ -60,7 +60,7 @@ export class SqliteWalletRepository implements WalletRepository {
       .insert(appWalletsTable)
       .values({
         id: input.id,
-        appUserId: input.appUserId,
+        userId: input.userId,
         chain: input.chain,
         address: input.address,
         status: input.status,
@@ -76,7 +76,7 @@ export class SqliteWalletRepository implements WalletRepository {
         updatedAt: input.updatedAt,
       })
       .onConflictDoUpdate({
-        target: appWalletsTable.appUserId,
+        target: appWalletsTable.userId,
         set: {
           chain: input.chain,
           address: input.address,
@@ -94,37 +94,33 @@ export class SqliteWalletRepository implements WalletRepository {
       });
 
     const row = await this.context.db.query.appWalletsTable.findFirst({
-      where: eq(appWalletsTable.appUserId, input.appUserId),
+      where: eq(appWalletsTable.userId, input.userId),
     });
 
     if (!row) {
-      throw new Error(`Expected wallet upsert for app user ${input.appUserId}`);
+      throw new Error(`Expected wallet upsert for user ${input.userId}`);
     }
 
     return mapAppWallet(row);
   }
 
-  async updateWalletStatus(appUserId: string, status: AppWallet["status"], updatedAt: string): Promise<void> {
+  async updateWalletStatus(userId: string, status: AppWallet["status"], updatedAt: string): Promise<void> {
     await this.context.db
       .update(appWalletsTable)
       .set({
         status,
         updatedAt,
       })
-      .where(eq(appWalletsTable.appUserId, appUserId));
+      .where(eq(appWalletsTable.userId, userId));
   }
 
-  async updateSignerStatus(
-    appUserId: string,
-    signerStatus: AppWallet["signerStatus"],
-    updatedAt: string,
-  ): Promise<void> {
+  async updateSignerStatus(userId: string, signerStatus: AppWallet["signerStatus"], updatedAt: string): Promise<void> {
     await this.context.db
       .update(appWalletsTable)
       .set({
         signerStatus,
         updatedAt,
       })
-      .where(eq(appWalletsTable.appUserId, appUserId));
+      .where(eq(appWalletsTable.userId, userId));
   }
 }

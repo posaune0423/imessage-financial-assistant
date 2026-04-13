@@ -13,7 +13,7 @@ import { HyperliquidService } from "./lib/hyperliquid/service";
 import { TurnkeyProvisioningClient } from "./lib/turnkey/client";
 import { TurnkeyProvisioningService } from "./lib/turnkey/provisioning";
 import { TurnkeyViemAccountFactory } from "./lib/turnkey/viem";
-import { SqliteAppUserRepository } from "./repositories/sqlite/sqlite-app-user-repository";
+import { SqliteUserRepository } from "./repositories/sqlite/sqlite-user-repository";
 import { createSqliteRepositoryContext } from "./repositories/sqlite/client";
 import type { SqliteRepositoryContext } from "./repositories/sqlite/client";
 import { SqliteWalletRepository } from "./repositories/sqlite/sqlite-wallet-repository";
@@ -57,10 +57,11 @@ export async function buildAppContainer(config: AppConfig = appConfig): Promise<
     watcher: { excludeOwnMessages: true },
   });
   const repositoryContext = await createSqliteRepositoryContext(config.agent.memory.databaseUrl);
-  const appUsers = new SqliteAppUserRepository(repositoryContext);
+  const users = new SqliteUserRepository(repositoryContext);
   const wallets = new SqliteWalletRepository(repositoryContext);
-  const userContextResolver = new UserContextResolver(appUsers, wallets);
+  const userContextResolver = new UserContextResolver(users, wallets);
   const turnkeyClient = new TurnkeyProvisioningClient(config.turnkey);
+  await turnkeyClient.validateAccess();
   const turnkeyProvisioning = new TurnkeyProvisioningService(wallets, turnkeyClient);
   const walletService = new WalletService(wallets, turnkeyProvisioning);
   const turnkeySignerFactory = new TurnkeyViemAccountFactory(config.turnkey);

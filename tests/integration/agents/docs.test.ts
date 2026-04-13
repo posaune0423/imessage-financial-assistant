@@ -9,7 +9,9 @@ describe("agent markdown files", () => {
     expect(soul).toContain("scheduled message");
     expect(soul).toContain("brave-search");
     expect(soul).toContain("MCP tools");
-    expect(soul).toContain("PLAIN TEXT ONLY");
+    expect(soul).toContain("IMESSAGE-SAFE TEXT ONLY");
+    expect(soul).toContain("Use lightweight Markdown emphasis");
+    expect(soul).toContain("Use emoji as visual signposts");
   });
 
   it("loads HEARTBEAT.md from src/agents", () => {
@@ -18,6 +20,6 @@ describe("agent markdown files", () => {
     expect(heartbeat).toContain("scheduling");
     expect(heartbeat).toContain("brave-search");
     expect(heartbeat).toContain("Do not use immediate `imessage_send_*` tools during heartbeat.");
-    expect(heartbeat).toContain("Return plain text only.");
+    expect(heartbeat).toContain("Prefer short bold labels");
   });
 });

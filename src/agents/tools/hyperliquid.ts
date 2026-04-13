@@ -7,7 +7,7 @@ import {
   createTradeConfirmationMessage,
 } from "../../domain/trading/confirmation";
 import type { WalletService } from "../../domain/wallets/service";
-import { getAppUserId, getIncomingText } from "../request-context";
+import { getIncomingText, getUserId } from "../request-context";
 import type { HyperliquidService } from "../../lib/hyperliquid/service";
 import type {
   HyperliquidCancelInput,
@@ -45,8 +45,8 @@ function createConfirmationPayload(action: string, parts: string[], summary: str
   };
 }
 
-async function getReadyWallet(wallets: WalletService, appUserId: string) {
-  const wallet = await wallets.getProfile(appUserId);
+async function getReadyWallet(wallets: WalletService, userId: string) {
+  const wallet = await wallets.getProfile(userId);
   if (!wallet) {
     throw new Error("Wallet is not provisioned yet");
   }
@@ -83,6 +83,7 @@ export function createHyperliquidTools(deps: HyperliquidToolDeps) {
         coins: z.array(z.string().min(1)).optional(),
       }),
       outputSchema: z.object({
+        network: z.enum(["mainnet", "testnet"]),
         timestamp: z.string(),
         assets: z.array(
           z.object({
@@ -103,12 +104,13 @@ export function createHyperliquidTools(deps: HyperliquidToolDeps) {
         address: z.string().startsWith("0x").optional(),
       }),
       outputSchema: z.object({
+        network: z.enum(["mainnet", "testnet"]),
         address: z.string(),
         summary: z.unknown(),
       }),
       execute: async ({ address }, context) => {
-        const appUserId = getAppUserId(context.requestContext);
-        const wallet = await deps.wallets.getProfile(appUserId);
+        const userId = getUserId(context.requestContext);
+        const wallet = await deps.wallets.getProfile(userId);
         const target = resolveTargetAddress(address ?? wallet?.address);
         if (!target) {
           throw new Error("No wallet address is available for this user");
@@ -124,12 +126,13 @@ export function createHyperliquidTools(deps: HyperliquidToolDeps) {
         address: z.string().startsWith("0x").optional(),
       }),
       outputSchema: z.object({
+        network: z.enum(["mainnet", "testnet"]),
         address: z.string(),
         orders: z.unknown(),
       }),
       execute: async ({ address }, context) => {
-        const appUserId = getAppUserId(context.requestContext);
-        const wallet = await deps.wallets.getProfile(appUserId);
+        const userId = getUserId(context.requestContext);
+        const wallet = await deps.wallets.getProfile(userId);
         const target = resolveTargetAddress(address ?? wallet?.address);
         if (!target) {
           throw new Error("No wallet address is available for this user");
@@ -146,12 +149,13 @@ export function createHyperliquidTools(deps: HyperliquidToolDeps) {
         limit: z.number().int().positive().max(50).optional(),
       }),
       outputSchema: z.object({
+        network: z.enum(["mainnet", "testnet"]),
         address: z.string(),
         fills: z.unknown(),
       }),
       execute: async ({ address, limit }, context) => {
-        const appUserId = getAppUserId(context.requestContext);
-        const wallet = await deps.wallets.getProfile(appUserId);
+        const userId = getUserId(context.requestContext);
+        const wallet = await deps.wallets.getProfile(userId);
         const target = resolveTargetAddress(address ?? wallet?.address);
         if (!target) {
           throw new Error("No wallet address is available for this user");
@@ -174,11 +178,11 @@ export function createHyperliquidTools(deps: HyperliquidToolDeps) {
       }),
       outputSchema: writeResultSchema,
       execute: async (input: HyperliquidOrderInput, context) => {
-        const appUserId = getAppUserId(context.requestContext);
-        const wallet = await getReadyWallet(deps.wallets, appUserId);
+        const userId = getUserId(context.requestContext);
+        const wallet = await getReadyWallet(deps.wallets, userId);
         const message = getIncomingText(context.requestContext);
         const parts = [input.market, input.side, input.size, input.price ?? "market", input.tif ?? "default"];
-        const summary = `${input.market} ${input.side} ${input.size} を ${input.price ? input.price : "成行"} で発注します。`;
+        const summary = `Place ${input.side} ${input.size} ${input.market} at ${input.price ?? "market"}.`;
         const { confirmationCode, confirmed } = isConfirmed(message, "place_order", parts);
 
         if (!confirmed) {
@@ -187,7 +191,7 @@ export function createHyperliquidTools(deps: HyperliquidToolDeps) {
 
         return {
           status: "submitted" as const,
-          message: `${input.market} の注文を送信しました。`,
+          message: `Submitted ${input.market} order.`,
           confirmationCode,
           result: await deps.hyperliquid.placeOrder(wallet, input),
         };
@@ -203,11 +207,11 @@ export function createHyperliquidTools(deps: HyperliquidToolDeps) {
       }),
       outputSchema: writeResultSchema,
       execute: async (input: HyperliquidCancelInput, context) => {
-        const appUserId = getAppUserId(context.requestContext);
-        const wallet = await getReadyWallet(deps.wallets, appUserId);
+        const userId = getUserId(context.requestContext);
+        const wallet = await getReadyWallet(deps.wallets, userId);
         const message = getIncomingText(context.requestContext);
         const parts = [input.market, String(input.orderId)];
-        const summary = `${input.market} の注文 ${input.orderId} をキャンセルします。`;
+        const summary = `Cancel order ${input.orderId} on ${input.market}.`;
         const { confirmationCode, confirmed } = isConfirmed(message, "cancel_order", parts);
 
         if (!confirmed) {
@@ -216,7 +220,7 @@ export function createHyperliquidTools(deps: HyperliquidToolDeps) {
 
         return {
           status: "submitted" as const,
-          message: `${input.market} の注文キャンセルを送信しました。`,
+          message: `Submitted cancel request for ${input.market} order ${input.orderId}.`,
           confirmationCode,
           result: await deps.hyperliquid.cancelOrder(wallet, input),
         };
@@ -237,11 +241,11 @@ export function createHyperliquidTools(deps: HyperliquidToolDeps) {
       }),
       outputSchema: writeResultSchema,
       execute: async (input: HyperliquidModifyInput, context) => {
-        const appUserId = getAppUserId(context.requestContext);
-        const wallet = await getReadyWallet(deps.wallets, appUserId);
+        const userId = getUserId(context.requestContext);
+        const wallet = await getReadyWallet(deps.wallets, userId);
         const message = getIncomingText(context.requestContext);
         const parts = [input.market, String(input.orderId), input.side, input.size, input.price];
-        const summary = `${input.market} の注文 ${input.orderId} を size=${input.size}, price=${input.price} に変更します。`;
+        const summary = `Modify ${input.market} order ${input.orderId} to size=${input.size} price=${input.price}.`;
         const { confirmationCode, confirmed } = isConfirmed(message, "modify_order", parts);
 
         if (!confirmed) {
@@ -250,7 +254,7 @@ export function createHyperliquidTools(deps: HyperliquidToolDeps) {
 
         return {
           status: "submitted" as const,
-          message: `${input.market} の注文変更を送信しました。`,
+          message: `Submitted modify request for ${input.market} order ${input.orderId}.`,
           confirmationCode,
           result: await deps.hyperliquid.modifyOrder(wallet, input),
         };
@@ -267,11 +271,11 @@ export function createHyperliquidTools(deps: HyperliquidToolDeps) {
       }),
       outputSchema: writeResultSchema,
       execute: async (input: HyperliquidLeverageInput, context) => {
-        const appUserId = getAppUserId(context.requestContext);
-        const wallet = await getReadyWallet(deps.wallets, appUserId);
+        const userId = getUserId(context.requestContext);
+        const wallet = await getReadyWallet(deps.wallets, userId);
         const message = getIncomingText(context.requestContext);
         const parts = [input.market, String(input.leverage), input.mode];
-        const summary = `${input.market} のレバレッジを ${input.mode} ${input.leverage}x に更新します。`;
+        const summary = `Update ${input.market} leverage to ${input.mode} ${input.leverage}x.`;
         const { confirmationCode, confirmed } = isConfirmed(message, "update_leverage", parts);
 
         if (!confirmed) {
@@ -280,7 +284,7 @@ export function createHyperliquidTools(deps: HyperliquidToolDeps) {
 
         return {
           status: "submitted" as const,
-          message: `${input.market} のレバレッジ更新を送信しました。`,
+          message: `Submitted leverage update for ${input.market}.`,
           confirmationCode,
           result: await deps.hyperliquid.updateLeverage(wallet, input),
         };
