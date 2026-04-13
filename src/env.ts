@@ -1,10 +1,14 @@
 import { createEnv } from "@t3-oss/env-core";
 import { z } from "zod";
 
+const booleanStringSchema = z
+  .union([z.boolean(), z.enum(["true", "false"])])
+  .transform((value) => value === true || value === "true");
+
 export const env = createEnv({
   server: {
-    ANTHROPIC_API_KEY: z.string().min(1),
-    ANTHROPIC_MODEL: z.string().default("anthropic/claude-haiku-4-5"),
+    OPENAI_API_KEY: z.string().min(1),
+    OPENAI_MODEL: z.string().default("openai/gpt-5.4-mini"),
     OWNER_PHONE: z.string().min(1),
 
     HEARTBEAT_INTERVAL_MS: z.coerce.number().default(60 * 60 * 1000),
@@ -22,6 +26,13 @@ export const env = createEnv({
     BRAVE_API_KEY: z.string().optional(),
     ALLIUM_API_KEY: z.string().optional(),
     MCP_TIMEOUT_MS: z.coerce.number().default(60_000),
+    TURNKEY_API_BASE_URL: z.string().url(),
+    TURNKEY_API_PUBLIC_KEY: z.string().min(1),
+    TURNKEY_API_PRIVATE_KEY: z.string().min(1),
+    TURNKEY_ORGANIZATION_ID: z.string().min(1),
+    TURNKEY_DELEGATED_KEY_SECRET_NAMESPACE: z.string().default("turnkey/delegated"),
+    HYPERLIQUID_NETWORK: z.enum(["mainnet", "testnet"]).default("mainnet"),
+    MULTI_USER_MODE: booleanStringSchema.default(true),
     LOG_LEVEL: z.enum(["fatal", "error", "warn", "log", "info", "debug", "trace"]).default("info"),
   },
   runtimeEnv: process.env,

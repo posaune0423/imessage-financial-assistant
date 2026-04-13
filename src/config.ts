@@ -1,13 +1,26 @@
 import { env } from "./env";
 
+export type HyperliquidNetwork = "mainnet" | "testnet";
+
+const HYPERLIQUID_ENDPOINTS = {
+  mainnet: {
+    apiUrl: "https://api.hyperliquid.xyz",
+    wsUrl: "wss://api.hyperliquid.xyz/ws",
+  },
+  testnet: {
+    apiUrl: "https://api.hyperliquid-testnet.xyz",
+    wsUrl: "wss://api.hyperliquid-testnet.xyz/ws",
+  },
+} as const satisfies Record<HyperliquidNetwork, { apiUrl: string; wsUrl: string }>;
+
 const AGENT_AUTONOMY_DEFAULTS = {
-  maxSteps: 5,
-  maxOutputTokens: 1_024,
+  maxSteps: 10,
+  maxOutputTokens: 2_048,
   observationalMemory: {
     enabled: false,
   },
   memory: {
-    lastMessages: 8,
+    lastMessages: 4,
   },
 } as const;
 
@@ -55,9 +68,25 @@ export interface McpConfig {
   };
 }
 
+export interface TurnkeyConfig {
+  apiBaseUrl: string;
+  apiPublicKey: string;
+  apiPrivateKey: string;
+  organizationId: string;
+  delegatedKeySecretNamespace: string;
+}
+
+export interface HyperliquidConfig {
+  network: HyperliquidNetwork;
+  isTestnet: boolean;
+  apiUrl: string;
+  wsUrl: string;
+}
+
 export interface AppConfig {
   ownerPhone: string;
   logLevel: typeof env.LOG_LEVEL;
+  multiUserMode: boolean;
   agent: GeneralAgentConfig;
   heartbeat: HeartbeatConfig;
   tools: {
@@ -65,14 +94,19 @@ export interface AppConfig {
     runtime: ToolRuntimeConfig;
   };
   mcp: McpConfig;
+  turnkey: TurnkeyConfig;
+  hyperliquid: HyperliquidConfig;
 }
 
 export function createAppConfig(source = env): AppConfig {
+  const hyperliquidEndpoints = HYPERLIQUID_ENDPOINTS[source.HYPERLIQUID_NETWORK];
+
   return {
     ownerPhone: source.OWNER_PHONE,
     logLevel: source.LOG_LEVEL,
+    multiUserMode: source.MULTI_USER_MODE,
     agent: {
-      model: source.ANTHROPIC_MODEL,
+      model: source.OPENAI_MODEL,
       maxSteps: AGENT_AUTONOMY_DEFAULTS.maxSteps,
       maxOutputTokens: AGENT_AUTONOMY_DEFAULTS.maxOutputTokens,
       memory: {
@@ -80,7 +114,7 @@ export function createAppConfig(source = env): AppConfig {
         lastMessages: AGENT_AUTONOMY_DEFAULTS.memory.lastMessages,
         observationalMemory: {
           enabled: AGENT_AUTONOMY_DEFAULTS.observationalMemory.enabled,
-          model: source.ANTHROPIC_MODEL,
+          model: source.OPENAI_MODEL,
         },
       },
     },
@@ -103,6 +137,19 @@ export function createAppConfig(source = env): AppConfig {
       servers: {
         allium: source.ALLIUM_API_KEY ? { apiKey: source.ALLIUM_API_KEY } : null,
       },
+    },
+    turnkey: {
+      apiBaseUrl: source.TURNKEY_API_BASE_URL,
+      apiPublicKey: source.TURNKEY_API_PUBLIC_KEY,
+      apiPrivateKey: source.TURNKEY_API_PRIVATE_KEY,
+      organizationId: source.TURNKEY_ORGANIZATION_ID,
+      delegatedKeySecretNamespace: source.TURNKEY_DELEGATED_KEY_SECRET_NAMESPACE,
+    },
+    hyperliquid: {
+      network: source.HYPERLIQUID_NETWORK,
+      isTestnet: source.HYPERLIQUID_NETWORK === "testnet",
+      apiUrl: hyperliquidEndpoints.apiUrl,
+      wsUrl: hyperliquidEndpoints.wsUrl,
     },
   };
 }

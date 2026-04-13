@@ -27,10 +27,15 @@ export function createAgentMemory(config: AgentMemoryConfig): Memory {
       workingMemory: {
         enabled: true,
         scope: "resource",
-        template: `# Owner Profile
+        template: `# User Profile
 - Name:
 - Timezone:
 - Preferred Reminder Style:
+
+# Wallet Context
+- Primary wallet exists:
+- Primary wallet address:
+- Preferred trading markets:
 
 # Current Goals
 - Goal 1:

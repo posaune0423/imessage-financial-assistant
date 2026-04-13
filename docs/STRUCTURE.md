@@ -1,11 +1,10 @@
 # STRUCTURE
 
-## 1. 目的
+## Purpose
 
-このファイルは「どこに何を置くか」を固定するためのもの。  
-実装よりも先に配置ルールを明確にして、構成の揺れを防ぐ。
+This document fixes where code belongs in the trading-agent codebase so the repository stays easy to reason about as the Hyperliquid and Turnkey surface grows.
 
-## 2. 採用する構成
+## Current Layout
 
 ```text
 .
@@ -13,9 +12,9 @@
 │   ├── DESIGN.md
 │   ├── PRD.md
 │   ├── STRUCTURE.md
-│   └── TECH.md
+│   ├── TECH.md
+│   └── specs/
 ├── scripts/
-│   └── send-message.ts
 ├── src/
 │   ├── agents/
 │   │   ├── HEARTBEAT.md
@@ -25,88 +24,109 @@
 │   │   ├── memory.ts
 │   │   ├── request-context.ts
 │   │   ├── mcp/
-│   │   │   ├── allium.ts
-│   │   │   ├── index.ts
 │   │   └── tools/
-│   │       ├── imessage.ts
-│   │       ├── index.ts
-│   │       ├── reminder.ts
-│   │       ├── runtime.ts
-│   │       ├── scheduling.ts
-│   │       └── brave.ts
+│   ├── domain/
+│   │   ├── trading/
+│   │   ├── users/
+│   │   └── wallets/
+│   ├── lib/
+│   │   ├── hyperliquid/
+│   │   └── turnkey/
+│   ├── repositories/
+│   │   ├── interfaces/
+│   │   └── sqlite/
 │   ├── utils/
-│   │   ├── fs.ts
-│   │   ├── logger.ts
-│   │   └── phone.ts
-│   ├── env.ts
 │   ├── config.ts
+│   ├── di.ts
+│   ├── env.ts
 │   └── main.ts
-├── data/                           # gitignore
-└── tests/
-    ├── e2e/
-    ├── integration/
-    ├── setup.ts
-    └── unit/
+├── tests/
+│   ├── e2e/
+│   ├── integration/
+│   ├── setup.ts
+│   └── unit/
+└── data/  # gitignored runtime state
 ```
 
-## 3. 配置ルール
+## Placement Rules
 
-### 3.1 `docs/`
+### `docs/`
 
-人間向けの設計文書を置く。
+Human-facing product and technical reference.
 
-- PRD
-- DESIGN
-- STRUCTURE
-- TECH
+- `PRD.md`: product intent and scope
+- `TECH.md`: compact technical truth
+- `DESIGN.md`: end-to-end architecture and flows
+- `STRUCTURE.md`: repository layout rules
+- `specs/`: deeper issue or feature specs
 
-### 3.2 `src/agents/`
+### `src/agents/`
 
-agent 関連の実装と、agent が runtime に読む markdown asset を置く。
+Agent-facing runtime assets and orchestration code.
 
-- `SOUL.md` — agent システムプロンプト
-- `HEARTBEAT.md` — heartbeat チェックリスト
-- agent definition
-- memory
-- heartbeat
-- request context helpers for agent/tool runtime
-- `tools/` — Mastra tool definitions と runtime wrappers
-- `mcp/` — file-based MCP server 定義と runtime 組み立て
+- prompts and markdown instructions
+- Mastra agent construction
+- heartbeat engine
+- request-context helpers
+- tool definitions
+- MCP runtime wiring
 
-### 3.3 `src/utils/`
+### `src/domain/`
 
-薄い再利用 helper だけを置く。
+Application business logic that should not depend on SDK constructors or raw SQL.
 
-- `fs.ts` — ファイル読み込み
-- `phone.ts` — 電話番号正規化
-- `logger.ts` — ログ出力
+- user resolution rules
+- wallet-domain behavior
+- trading confirmation rules
 
-複雑な domain logic は入れない。
+### `src/lib/`
 
-### 3.4 `tests/`
+External-system adapters.
 
-Vitest の test hierarchy を固定する。
+- Turnkey client, provisioning, signing, ownership-auth helpers
+- Hyperliquid service and interfaces
 
-- `tests/unit`
-- `tests/integration`
-- `tests/e2e`
+### `src/repositories/`
 
-## 4. 採用しない配置
+Persistence boundary.
 
-以下には戻さない。
+- `interfaces/`: repository contracts
+- `sqlite/`: Drizzle schema and SQLite implementations
 
-- `src/lib/imessage`
-- `src/workflows`
-- `src/mastra`
-- top-level `agents/` ディレクトリ（md は `src/agents/` に同居）
+### `src/utils/`
 
-## 5. 命名ルール
+Thin, reusable helpers only.
 
-- env schema は `src/env.ts`
-- app config composition は `src/config.ts`
-- phone helper は `src/utils/phone.ts`
-- file loader は `src/utils/fs.ts`
-- entrypoint は `src/main.ts`
-- agent prompt markdown は `src/agents/*.md`
-- tool 実装は `src/agents/tools/*.ts`
-- MCP 実装は `src/agents/mcp/*.ts`
+- logging
+- phone normalization
+- file loading
+- process locking
+
+### `src/main.ts`
+
+Transport entrypoint and orchestration only.
+
+- inbound message handling
+- request-context assembly
+- direct-message routing
+- agent invocation
+- reply handling
+
+It should not own business rules that belong in `domain/` or external adapter setup that belongs behind `di.ts`.
+
+### `src/di.ts`
+
+Dependency composition root.
+
+- repository setup
+- Turnkey and Hyperliquid adapter wiring
+- agent and tool runtime construction
+- SDK construction
+
+## Rules for New Code
+
+- Put trading or wallet decisions in `src/domain`, not inside agent tools.
+- Put exchange or wallet SDK details in `src/lib`, not inside `src/main.ts`.
+- Put app-owned persistence schema in `src/repositories/sqlite`.
+- Keep agent tools thin: they should call domain services or adapters, not instantiate SDKs directly.
+- Keep docs aligned to the trading-agent concept. Do not reintroduce the old generic-template framing.

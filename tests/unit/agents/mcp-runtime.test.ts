@@ -2,7 +2,7 @@ import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { describe, expect, it, vi } from "vitest";
 
-import type { McpConfig } from "../../src/config";
+import type { McpConfig } from "../../../src/config";
 
 vi.mock("@mastra/mcp", () => {
   class FakeMCPClient {
@@ -29,6 +29,27 @@ vi.mock("@mastra/mcp", () => {
               execute: async ({ message }) => ({
                 echoed: message,
               }),
+            }),
+            realtime_latest_token_balances: createTool({
+              id: "realtime_latest_token_balances",
+              description: "Latest balances",
+              inputSchema: z.object({}),
+              outputSchema: z.object({ ok: z.boolean() }),
+              execute: async () => ({ ok: true }),
+            }),
+            realtime_token_latest_price: createTool({
+              id: "realtime_token_latest_price",
+              description: "Latest token price",
+              inputSchema: z.object({}),
+              outputSchema: z.object({ ok: z.boolean() }),
+              execute: async () => ({ ok: true }),
+            }),
+            realtime_transactions: createTool({
+              id: "realtime_transactions",
+              description: "Transactions",
+              inputSchema: z.object({}),
+              outputSchema: z.object({ ok: z.boolean() }),
+              execute: async () => ({ ok: true }),
             }),
           },
         },
@@ -59,7 +80,7 @@ async function executeTool(tool: unknown, args: unknown) {
 
 describe("createMcpRuntime", () => {
   it("builds the allium server and executes an MCP toolset tool", async () => {
-    const { createMcpRuntime } = await import("../../src/agents/mcp");
+    const { createMcpRuntime } = await import("../../../src/agents/mcp");
     const config: McpConfig = {
       timeoutMs: 1_000,
       servers: {
@@ -81,7 +102,7 @@ describe("createMcpRuntime", () => {
   });
 
   it("returns empty toolsets when no MCP server is configured", async () => {
-    const { createMcpRuntime } = await import("../../src/agents/mcp");
+    const { createMcpRuntime } = await import("../../../src/agents/mcp");
     const runtime = createMcpRuntime({
       timeoutMs: 1_000,
       servers: {
@@ -90,5 +111,21 @@ describe("createMcpRuntime", () => {
     });
 
     await expect(runtime.getToolsets()).resolves.toEqual({});
+  });
+
+  it("filters Allium tools by request intent", async () => {
+    const { createMcpRuntime } = await import("../../../src/agents/mcp");
+    const runtime = createMcpRuntime({
+      timeoutMs: 1_000,
+      servers: {
+        allium: { apiKey: "allium-test-key" },
+      },
+    });
+
+    const toolsets = await runtime.getToolsetsForText("show my wallet balance");
+    const toolIds = Object.keys(toolsets.allium ?? {});
+
+    expect(toolIds).toContain("realtime_latest_token_balances");
+    expect(toolIds).not.toContain("echo");
   });
 });

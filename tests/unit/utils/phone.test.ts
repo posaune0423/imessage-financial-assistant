@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { normalizePhone, samePhone } from "../../src/utils/phone";
+import { normalizePhone, samePhone } from "../../../src/utils/phone";
 
 describe("phone utils", () => {
   it("normalizes phone formatting characters", () => {

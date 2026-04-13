@@ -1,10 +1,15 @@
-process.env.ANTHROPIC_API_KEY ??= "test-anthropic-key";
-process.env.ANTHROPIC_MODEL ??= "anthropic/claude-haiku-4-5";
+process.env.OPENAI_API_KEY ??= "test-openai-key";
+process.env.OPENAI_MODEL ??= "openai/gpt-5.4-mini";
 process.env.OWNER_PHONE ??= "+819012345678";
 process.env.DATABASE_URL ??= "file:./data/test-agent.db";
 process.env.IMESSAGE_SCHEDULER_PERSIST_PATH ??= "./data/test-imessage-scheduler.json";
 process.env.ALLIUM_API_KEY ??= "";
 process.env.MCP_TIMEOUT_MS ??= "1000";
+process.env.TURNKEY_API_BASE_URL ??= "https://api.turnkey.com";
+process.env.TURNKEY_API_PUBLIC_KEY ??= "test-turnkey-public-key";
+process.env.TURNKEY_API_PRIVATE_KEY ??= "test-turnkey-private-key";
+process.env.TURNKEY_ORGANIZATION_ID ??= "test-turnkey-org";
+process.env.HYPERLIQUID_NETWORK ??= "mainnet";
 process.env.LOG_LEVEL ??= "error";
 process.env.HEARTBEAT_INTERVAL_MS ??= "60000";
 process.env.HEARTBEAT_ACTIVE_START ??= "08:00";

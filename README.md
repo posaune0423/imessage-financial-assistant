@@ -1,175 +1,79 @@
 <div align="center">
 
-# mastra-imessage-agent
+<img src="./docs/readme-hero.svg" alt="Photon-powered iMessage-first Hyperliquid agent" width="100%" />
 
-**A compact iMessage-first personal agent template built with Mastra on macOS.**
+# imessage-financial-assistant
 
-[![CI](https://github.com/posaune0423/mastra-imessage-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/posaune0423/mastra-imessage-agent/actions/workflows/ci.yml)
-[![Bun](https://img.shields.io/badge/Bun-1.3+-000?logo=bun&logoColor=fff)](https://bun.com)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178C6?logo=typescript&logoColor=fff)](https://www.typescriptlang.org/)
-[![Mastra](https://img.shields.io/badge/Mastra-Agent-111827)](https://mastra.ai)
-[![Anthropic](https://img.shields.io/badge/Anthropic-Claude-D97706)](https://platform.claude.com/docs/en/home)
-[![Brave Search](https://img.shields.io/badge/Brave-Search%20API-F97316)](https://brave.com/search/api/)
+**Photon-powered iMessage use case for a Hyperliquid trading agent.**
 
-[Repository](https://github.com/posaune0423/mastra-imessage-agent) · [Mastra](https://mastra.ai) · [Photon iMessage Kit](https://github.com/photon-hq/imessage-kit)
+[![CI](https://github.com/posaune0423/imessage-financial-assistant/actions/workflows/ci.yml/badge.svg)](https://github.com/posaune0423/imessage-financial-assistant/actions/workflows/ci.yml)
+[![Photon](https://img.shields.io/badge/Photon-iMessage%20Kit-111827)](https://github.com/photon-hq/imessage-kit)
+[![Mastra](https://img.shields.io/badge/Mastra-Agent-0F172A)](https://mastra.ai)
+[![Turnkey](https://img.shields.io/badge/Turnkey-Wallet%20Infra-1D4ED8)](https://www.turnkey.com/)
+[![Hyperliquid](https://img.shields.io/badge/Hyperliquid-Trading-16A34A)](https://hyperliquid.xyz/)
+
+[Photon iMessage Kit](https://github.com/photon-hq/imessage-kit) · [PRD](./docs/PRD.md) · [TECH](./docs/TECH.md) · [STRUCTURE](./docs/STRUCTURE.md)
 
 </div>
 
-## Overview
+## What This Product Is
 
-`mastra-imessage-agent` is a small, inspectable template for running an AI assistant through iMessage. It listens to direct messages from a configured owner phone number, responds with a Mastra agent, persists conversation memory in SQLite/LibSQL, and can proactively act outside the chat loop through heartbeat, reminder, scheduled-message, and MCP-backed workflows.
+This repo is an `iMessage -> Photon -> agent -> wallet -> Hyperliquid` product.
 
-This repository is intentionally narrow in scope: one user, one local macOS runtime, one agent process, and a codebase that is easy to read and modify.
+- The user talks in iMessage.
+- `@photon-ai/imessage-kit` turns that chat into app events on macOS.
+- A Mastra agent resolves intent, reads account state, and prepares actions.
+- Turnkey handles wallet provisioning and signing.
+- Hyperliquid is the trading venue.
 
-## Agent Capabilities
+The result is a chat-native trading workflow without building a separate frontend.
 
-| Capability              | What it does                                                                      | Notes                                                          |
-| ----------------------- | --------------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| Direct iMessage replies | Handles inbound owner messages and sends plain-text replies back over iMessage.   | Runs on local macOS via `@photon-ai/imessage-kit`.             |
-| Memory                  | Persists conversation context and recent thread history.                          | Backed by `@mastra/memory` and `@mastra/libsql`.               |
-| Heartbeat               | Runs periodic proactive checks and stays silent when there is nothing to report.  | Returns `HEARTBEAT_OK` for no-op cycles.                       |
-| Reminder                | Creates follow-up reminders from relative, natural-language, or exact timestamps. | Supports listing and cancellation.                             |
-| Schedule                | Queues one-time or recurring iMessages for future delivery.                       | Supports list, reschedule, and cancel flows.                   |
-| MCP                     | Connects external toolsets when domain-specific capabilities are needed.          | Includes Allium MCP wiring as the built-in example.            |
-| Web access              | Searches or fetches live web content for current information.                     | `brave-search` is optional; `brave-fetch` is always available. |
+## Why This Is a Good Photon Use Case
 
-## Tech Stack
+This is not a generic bot template. It is a concrete Photon use case that shows how to build an iMessage-native product with real wallet and trading state behind it.
 
-| Layer               | Technology                                                           | Purpose                                       |
-| ------------------- | -------------------------------------------------------------------- | --------------------------------------------- |
-| Runtime             | [Bun](https://bun.com)                                               | App runtime, scripts, package management      |
-| Language            | [TypeScript](https://www.typescriptlang.org/)                        | Typed application code                        |
-| Agent runtime       | [Mastra](https://mastra.ai) (`@mastra/core`)                         | Agent orchestration, tool execution           |
-| LLM provider        | [Anthropic API](https://platform.claude.com/docs/en/home)            | Claude model access for the main agent        |
-| Messaging transport | [@photon-ai/imessage-kit](https://github.com/photon-hq/imessage-kit) | iMessage receive/send, scheduler, reminders   |
-| Memory              | `@mastra/memory`                                                     | Conversation memory layer                     |
-| Storage             | `@mastra/libsql`                                                     | SQLite/LibSQL-backed persistence              |
-| Web search          | [Brave Search API](https://brave.com/search/api/)                    | Optional live search tool                     |
-| MCP client          | `@mastra/mcp`                                                        | Remote toolset connectivity                   |
-| Example MCP server  | [Allium MCP](https://mcp.allium.so)                                  | Optional onchain / blockchain toolset example |
-| Validation          | `zod`, `@t3-oss/env-core`                                            | Runtime-safe env and input validation         |
-| Tests / quality     | `vite-plus` (`vp`) + Vitest                                          | Lint, typecheck, unit/integration/e2e tests   |
+- iMessage is the primary UI, not a notification side channel.
+- Photon is the transport boundary that makes the local Messages runtime usable from app code.
+- The app can reply with portfolio data, market context, and confirmation-gated trading actions in the same conversation.
+
+## Main Use Cases
+
+- Check wallet-backed account state from iMessage
+- Read Hyperliquid market snapshots, open orders, and recent fills
+- Place, cancel, modify, or update leverage with an explicit confirmation code
 
 ## Architecture
 
-```text
-iMessage DM -> IMessageSDK watcher -> Mastra agent -> tools / MCP -> iMessage reply
-                                      |                |
-                                      |                +-> Brave Search / Brave Fetch
-                                      |
-                                      +-> SQLite / LibSQL memory
-                                      +-> Heartbeat engine
-                                      +-> Scheduler / reminders
+```mermaid
+flowchart TD
+    U[User in iMessage] --> P[Photon watcher<br/>@photon-ai/imessage-kit]
+    P --> R[src/main.ts message router]
+    R --> C[User resolution<br/>request context]
+    C --> T[Turnkey wallet provisioning<br/>and signing]
+    C --> A[Mastra general-agent]
+    A --> H[Hyperliquid tools]
+    T --> H
+    H --> O[Plain-text iMessage reply]
+    O --> U
 ```
 
-## Requirements
-
-| Requirement            | Notes                                                                                                                                                                                      |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| macOS                  | The transport depends on the local Messages database and AppleScript-compatible iMessage automation.                                                                                       |
-| [Bun](https://bun.com) | Repository runtime and package manager (`bun@1.3.10`).                                                                                                                                     |
-| TypeScript             | Peer dependency (`^5`).                                                                                                                                                                    |
-| Full Disk Access       | Terminal / IDE needs access so `@photon-ai/imessage-kit` can read local Messages data. See the upstream [permission guide](https://github.com/photon-hq/imessage-kit#granting-permission). |
-| Anthropic API key      | Required for the default Claude-backed agent.                                                                                                                                              |
+Signed trading actions stay confirmation-gated: the agent returns a deterministic code first, and execution only happens after that exact code comes back through iMessage.
 
 ## Quick Start
 
 ```bash
-git clone https://github.com/posaune0423/mastra-imessage-agent.git
-cd mastra-imessage-agent
 bun install
-```
-
-Create a `.env` file with the values you need:
-
-```bash
-# required
-ANTHROPIC_API_KEY=...
-OWNER_PHONE=+819012345678
-
-# optional
-ANTHROPIC_MODEL=anthropic/claude-haiku-4-5
-DATABASE_URL=file:./data/agent.db
-IMESSAGE_SCHEDULER_PERSIST_PATH=./data/imessage-scheduler.json
-HEARTBEAT_INTERVAL_MS=3600000
-HEARTBEAT_ACTIVE_START=08:00
-HEARTBEAT_ACTIVE_END=22:00
-LOG_LEVEL=info
-BRAVE_API_KEY=
-ALLIUM_API_KEY=
-MCP_TIMEOUT_MS=60000
-```
-
-Then start the agent:
-
-```bash
+cp .env.example .env
 bun run dev
 ```
 
-For a production-style run:
-
-```bash
-bun run start
-```
-
-## Optional Integrations
-
-### Brave Search
-
-Set `BRAVE_API_KEY` to enable the live `brave-search` tool. This is intended for requests that depend on current information. The repository also includes `brave-fetch` for fetching page contents from a known URL.
-
-### Anthropic API
-
-The default model is `anthropic/claude-haiku-4-5`, configured through `ANTHROPIC_MODEL`. Any compatible Anthropic-backed model string can be supplied through the same environment variable.
-
-### MCP
-
-Set `ALLIUM_API_KEY` to enable the built-in Allium MCP server at `https://mcp.allium.so`. Additional MCP servers should be added under [`src/agents/mcp/`](src/agents/mcp/) and wired through [`src/agents/mcp/index.ts`](src/agents/mcp/index.ts).
+You need macOS, Messages access for Photon, an OpenAI API key, and Turnkey server credentials. For the full environment contract and implementation details, see [docs/TECH.md](./docs/TECH.md).
 
 ## Development
 
-Run the main quality gate:
-
 ```bash
-bun run check
-```
-
-Common commands:
-
-```bash
-bun run fmt
-bun run lint
+vp check
 bun run test
-bun run test:unit
-bun run test:integration
 bun run test:e2e
+bun run dev
 ```
-
-Current automated coverage includes:
-
-- unit tests for env/config wiring, scheduler persistence, helpers, and MCP runtime behavior
-- integration tests for built-in tools, agent docs, and heartbeat behavior
-- e2e tests for direct-message routing, progress replies, scheduling logs, and failure handling
-
-## Repository Layout
-
-```text
-docs/                  product and technical reference
-src/agents/            agent prompts, heartbeat engine, memory, MCP, tools
-src/agents/tools/      iMessage, scheduling, reminder, and Brave tool definitions
-src/agents/mcp/        MCP server definitions and runtime wiring
-src/main.ts            application entrypoint
-tests/                 unit, integration, and e2e coverage
-```
-
-## CI
-
-[.github/workflows/ci.yml](.github/workflows/ci.yml) runs `bun run check` and `bun run test` on pushes to `main` and pull requests.
-
----
-
-<div align="center">
-
-<sub>Personal / educational project. Respect privacy, local device security, and Apple's platform terms when automating Messages.</sub>
-
-</div>

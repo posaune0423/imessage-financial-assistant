@@ -1,0 +1,91 @@
+<svg width="1200" height="640" viewBox="0 0 1200 640" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">iMessage Financial Assistant Hero</title>
+  <desc id="desc">A visual summary of an iMessage-first Hyperliquid trading agent powered by Photon, Mastra, Turnkey, and Hyperliquid.</desc>
+  <defs>
+    <linearGradient id="bg" x1="120" y1="80" x2="1080" y2="560" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F7F1E4"/>
+      <stop offset="0.48" stop-color="#E8F8EC"/>
+      <stop offset="1" stop-color="#DCEBFF"/>
+    </linearGradient>
+    <linearGradient id="card" x1="212" y1="110" x2="988" y2="530" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0F172A"/>
+      <stop offset="1" stop-color="#182235"/>
+    </linearGradient>
+    <filter id="shadow" x="136" y="78" width="928" height="500" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feFlood flood-opacity="0" result="BackgroundImageFix"/>
+      <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
+      <feOffset dy="18"/>
+      <feGaussianBlur stdDeviation="28"/>
+      <feComposite in2="hardAlpha" operator="out"/>
+      <feColorMatrix type="matrix" values="0 0 0 0 0.0588235 0 0 0 0 0.0941176 0 0 0 0 0.160784 0 0 0 0.18 0"/>
+      <feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow_1_1"/>
+      <feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_1_1" result="shape"/>
+    </filter>
+  </defs>
+
+  <rect width="1200" height="640" rx="40" fill="url(#bg)"/>
+  <circle cx="176" cy="122" r="72" fill="#D6F5E3"/>
+  <circle cx="1040" cy="520" r="86" fill="#CFE0FF"/>
+  <circle cx="110" cy="522" r="42" fill="#FFE2A8"/>
+
+  <g filter="url(#shadow)">
+    <rect x="192" y="116" width="816" height="404" rx="30" fill="url(#card)"/>
+  </g>
+
+  <rect x="744" y="146" width="220" height="344" rx="26" fill="#111C31" stroke="#24324B" stroke-width="2"/>
+  <text x="274" y="204" fill="#93E5BB" font-family="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="19" font-weight="700" letter-spacing="0.18em">
+    PHOTON POWERED USE CASE
+  </text>
+  <text x="274" y="280" fill="white" font-family="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="52" font-weight="800">
+    iMessage-first
+  </text>
+  <text x="274" y="338" fill="white" font-family="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="52" font-weight="800">
+    trading agent
+  </text>
+  <text x="274" y="396" fill="white" font-family="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="52" font-weight="800">
+    for Hyperliquid
+  </text>
+  <text x="274" y="450" fill="#CBD5E1" font-family="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="22" font-weight="500">
+    Messages stays the UI.
+  </text>
+  <text x="274" y="482" fill="#CBD5E1" font-family="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="22" font-weight="500">
+    Photon turns chat into wallet-aware execution.
+  </text>
+
+  <text x="854" y="188" text-anchor="middle" fill="#A8B9D8" font-family="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="16" font-weight="700" letter-spacing="0.16em">
+    REQUEST FLOW
+  </text>
+
+  <rect x="794" y="212" width="120" height="48" rx="18" fill="#34C759"/>
+  <text x="854" y="243" text-anchor="middle" fill="white" font-family="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="20" font-weight="700">
+    iMessage
+  </text>
+
+  <path d="M854 262V286" stroke="#8DE1B5" stroke-width="4" stroke-linecap="round"/>
+
+  <rect x="774" y="288" width="160" height="54" rx="18" fill="#18273F" stroke="#8DE1B5" stroke-width="2"/>
+  <text x="854" y="321" text-anchor="middle" fill="#E2E8F0" font-family="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="22" font-weight="700">
+    Photon
+  </text>
+
+  <path d="M854 344V368" stroke="#8DE1B5" stroke-width="4" stroke-linecap="round"/>
+
+  <rect x="774" y="370" width="160" height="54" rx="18" fill="#18273F" stroke="#7DD3FC" stroke-width="2"/>
+  <text x="854" y="403" text-anchor="middle" fill="#E2E8F0" font-family="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="22" font-weight="700">
+    Mastra
+  </text>
+
+  <path d="M854 426V442" stroke="#8DE1B5" stroke-width="4" stroke-linecap="round"/>
+  <path d="M854 442H806" stroke="#8DE1B5" stroke-width="4" stroke-linecap="round"/>
+  <path d="M854 442H902" stroke="#8DE1B5" stroke-width="4" stroke-linecap="round"/>
+
+  <rect x="756" y="444" width="100" height="40" rx="14" fill="#F59E0B"/>
+  <text x="806" y="470" text-anchor="middle" fill="#0F172A" font-family="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="17" font-weight="800">
+    Turnkey
+  </text>
+
+  <rect x="852" y="444" width="100" height="40" rx="14" fill="#60A5FA"/>
+  <text x="902" y="470" text-anchor="middle" fill="#0F172A" font-family="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="16" font-weight="800">
+    Hyperliquid
+  </text>
+</svg>
