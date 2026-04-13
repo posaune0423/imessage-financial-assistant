@@ -18,7 +18,6 @@ const DEFAULT_ETHEREUM_ACCOUNT = {
 } as const;
 
 type UnaryCallable = (input: unknown) => unknown;
-const TURNKEY_LOG_VALUE_LIMIT = 1_000;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -124,19 +123,32 @@ function getPolicyConsensus(policy: unknown): string | null {
   return getString(policy, "consensus");
 }
 
-function formatDebugValue(value: unknown): string {
-  try {
-    const serialized = JSON.stringify(value);
-    if (!serialized) {
-      return String(value);
-    }
+function describeDebugValue(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `array(len=${value.length})`;
+  }
 
-    return serialized.length > TURNKEY_LOG_VALUE_LIMIT
-      ? `${serialized.slice(0, TURNKEY_LOG_VALUE_LIMIT)}...`
-      : serialized;
-  } catch {
+  if (isRecord(value)) {
+    return `object(keys=${Object.keys(value).length})`;
+  }
+
+  if (typeof value === "string") {
+    return `string(len=${value.length})`;
+  }
+
+  if (value === null || value === undefined) {
     return String(value);
   }
+
+  return typeof value;
+}
+
+function describeDebugError(error: unknown): string {
+  if (error instanceof Error) {
+    return `${error.name}: ${error.message}`;
+  }
+
+  return describeDebugValue(error);
 }
 
 function formatTurnkeyConfigurationError(organizationId: string, error: unknown): Error {
@@ -167,20 +179,16 @@ export class TurnkeyProvisioningClient implements TurnkeyProvisioningAdapter {
     const client = this.sdk.apiClient();
     const whoami = getTurnkeyMethod(client, "getWhoami");
 
-    try {
-      await this.runTurnkeyRequest(
-        "getWhoami",
-        {
+    await this.runTurnkeyRequest(
+      "getWhoami",
+      {
+        organizationId: this.config.organizationId,
+      },
+      async () =>
+        whoami({
           organizationId: this.config.organizationId,
-        },
-        async () =>
-          whoami({
-            organizationId: this.config.organizationId,
-          }),
-      );
-    } catch (error) {
-      throw formatTurnkeyConfigurationError(this.config.organizationId, error);
-    }
+        }),
+    );
   }
 
   async lookupSubOrganizationByPhone(phoneNumber: string): Promise<TurnkeyWalletLinkage | null> {
@@ -433,16 +441,14 @@ export class TurnkeyProvisioningClient implements TurnkeyProvisioningAdapter {
     operation: () => Promise<T>,
     organizationId = this.config.organizationId,
   ): Promise<T> {
-    logger.debug(`[turnkey] -> ${operationName} input=${formatDebugValue(input)}`);
+    logger.debug(`[turnkey] -> ${operationName} input=${describeDebugValue(input)}`);
 
     try {
       const result = await operation();
-      logger.debug(`[turnkey] <- ${operationName} result=${formatDebugValue(result)}`);
+      logger.debug(`[turnkey] <- ${operationName} result=${describeDebugValue(result)}`);
       return result;
     } catch (error) {
-      logger.debug(
-        `[turnkey] !! ${operationName} error=${formatDebugValue(error instanceof Error ? error.message : error)}`,
-      );
+      logger.debug(`[turnkey] !! ${operationName} error=${describeDebugError(error)}`);
       throw formatTurnkeyConfigurationError(organizationId, error);
     }
   }

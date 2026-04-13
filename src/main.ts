@@ -115,13 +115,17 @@ function splitReplyIntoMessages(text: string): string[] {
   return message ? [message] : [];
 }
 
+function logOutgoingMessage(target: string, text: string) {
+  logger.info(`[imessage] -> to=${target} chars=${text.length} lines=${text.split("\n").length}`);
+}
+
 async function sendIMessageSafeReply(
   sendMessage: DirectMessageHandlerDeps["sendMessage"],
   target: string,
   text: string,
 ) {
   for (const chunk of splitReplyIntoMessages(text)) {
-    logger.info(`[imessage] -> to=${target} text=${JSON.stringify(chunk)}`);
+    logOutgoingMessage(target, chunk);
     await sendMessage(target, chunk);
   }
 }
@@ -340,7 +344,7 @@ export function createDirectMessageHandler(deps: DirectMessageHandlerDeps) {
           }
 
           sentToolProgressReply = true;
-          logger.info(`[imessage] -> to=${replyTarget} text=${JSON.stringify(TOOL_PROGRESS_REPLY)}`);
+          logOutgoingMessage(replyTarget, TOOL_PROGRESS_REPLY);
           await deps.sendMessage(replyTarget, TOOL_PROGRESS_REPLY);
         },
       });
@@ -353,7 +357,7 @@ export function createDirectMessageHandler(deps: DirectMessageHandlerDeps) {
     } catch (error) {
       logger.error("[imessage] failed to handle direct message", error);
       const failureReply = getDirectMessageFailureReply(error);
-      logger.info(`[imessage] -> to=${replyTarget} text=${JSON.stringify(failureReply)}`);
+      logOutgoingMessage(replyTarget, failureReply);
       await deps.sendMessage(replyTarget, failureReply);
     }
   };

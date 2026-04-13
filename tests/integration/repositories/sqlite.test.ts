@@ -62,7 +62,9 @@ describe("SQLite repositories", () => {
       identityType: "chat_id",
       createdAt: "2099-03-22T00:00:01.000Z",
     });
+    const before = await users.findById("user-1");
     await users.updateDisplayName("user-1", "Trader");
+    const after = await users.findById("user-1");
 
     await expect(users.findById("user-1")).resolves.toMatchObject({
       id: "user-1",
@@ -86,6 +88,22 @@ describe("SQLite repositories", () => {
         }),
       ]),
     );
+    expect(after?.updatedAt).not.toBe(before?.updatedAt);
+  });
+
+  it("enables foreign key enforcement for messaging identities", async () => {
+    const { users } = await createRepositories();
+
+    await expect(
+      users.createMessagingIdentity({
+        id: "identity-missing-user",
+        userId: "missing-user",
+        channel: "imessage",
+        identity: "+819099988877",
+        identityType: "phone_number",
+        createdAt: "2099-03-22T00:00:00.000Z",
+      }),
+    ).rejects.toThrow();
   });
 
   it("upserts the primary wallet and persists state transitions", async () => {

@@ -1,6 +1,10 @@
 import { createEnv } from "@t3-oss/env-core";
 import { z } from "zod";
 
+const booleanStringSchema = z
+  .union([z.boolean(), z.enum(["true", "false"])])
+  .transform((value) => value === true || value === "true");
+
 export const env = createEnv({
   server: {
     OPENAI_API_KEY: z.string().min(1),
@@ -28,7 +32,7 @@ export const env = createEnv({
     TURNKEY_ORGANIZATION_ID: z.string().min(1),
     TURNKEY_DELEGATED_KEY_SECRET_NAMESPACE: z.string().default("turnkey/delegated"),
     HYPERLIQUID_NETWORK: z.enum(["mainnet", "testnet"]).default("mainnet"),
-    MULTI_USER_MODE: z.coerce.boolean().default(true),
+    MULTI_USER_MODE: booleanStringSchema.default(true),
     LOG_LEVEL: z.enum(["fatal", "error", "warn", "log", "info", "debug", "trace"]).default("info"),
   },
   runtimeEnv: process.env,

@@ -182,4 +182,29 @@ describe("TurnkeyProvisioningService", () => {
       turnkeyDelegatedKeyRef: "turnkey/delegated/org-1/delegated-1",
     });
   });
+
+  it("reuses the same in-flight provisioning promise for concurrent requests", async () => {
+    const { repository } = createWalletRepository();
+    let resolveProvision!: (value: TurnkeyWalletLinkage | PromiseLike<TurnkeyWalletLinkage>) => void;
+    const provisionSubOrganization = vi.fn(
+      async () =>
+        new Promise<TurnkeyWalletLinkage>((resolve) => {
+          resolveProvision = resolve;
+        }),
+    );
+    const turnkey = createTurnkeyAdapter({
+      lookupSubOrganizationByPhone: async () => null,
+      provisionSubOrganization,
+    });
+    const service = new TurnkeyProvisioningService(repository, turnkey);
+
+    const first = service.ensurePrimaryWallet(userContext);
+    const second = service.ensurePrimaryWallet(userContext);
+
+    await vi.waitFor(() => expect(provisionSubOrganization).toHaveBeenCalledTimes(1));
+    resolveProvision(linkage);
+
+    await expect(first).resolves.toMatchObject({ userId: "user-1", status: "ready" });
+    await expect(second).resolves.toMatchObject({ userId: "user-1", status: "ready" });
+  });
 });

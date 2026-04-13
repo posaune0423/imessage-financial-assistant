@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 
-import type { MessagingIdentity, User } from "../../domain/users/types";
+import type { MessagingChannel, MessagingIdentity, MessagingIdentityType, User } from "../../domain/users/types";
 import type { CreateUserInput, CreateMessagingIdentityInput, UserRepository } from "../interfaces/user-repository";
 import type { SqliteRepositoryContext } from "./client";
 import { messagingIdentitiesTable, usersTable } from "./schema";
@@ -16,8 +16,9 @@ function mapUser(row: typeof usersTable.$inferSelect): User {
 }
 
 function mapMessagingIdentity(row: typeof messagingIdentitiesTable.$inferSelect): MessagingIdentity {
-  const channel = row.channel === "imessage" ? "imessage" : "imessage";
-  const identityType = row.identityType === "chat_id" ? "chat_id" : "phone_number";
+  const channel: MessagingChannel = row.channel === "imessage" ? row.channel : "imessage";
+  const identityType: MessagingIdentityType =
+    row.identityType === "chat_id" || row.identityType === "phone_number" ? row.identityType : "phone_number";
 
   return {
     id: row.id,
@@ -110,6 +111,7 @@ export class SqliteUserRepository implements UserRepository {
       .update(usersTable)
       .set({
         displayName,
+        updatedAt: new Date().toISOString(),
       })
       .where(eq(usersTable.id, userId));
   }

@@ -113,4 +113,91 @@ describe("UserContextResolver", () => {
     expect(second.resourceKey).not.toBe(first.resourceKey);
     expect(repos.identities.map((item) => item.identity).toSorted()).toEqual(["+819012345678", "+819099988877"]);
   });
+
+  it("re-resolves by identity after binding so an orphan user is not returned on conflicts", async () => {
+    const existingUser: User = {
+      id: "existing-user",
+      resourceKey: "user:existing-user",
+      displayName: null,
+      createdAt: "2099-03-22T00:00:00.000Z",
+      updatedAt: "2099-03-22T00:00:00.000Z",
+    };
+    const userStore = new Map<string, User>([[existingUser.id, existingUser]]);
+    const identities: MessagingIdentity[] = [
+      {
+        id: "identity-existing",
+        userId: existingUser.id,
+        channel: "imessage",
+        identity: "+819012345678",
+        identityType: "phone_number",
+        createdAt: "2099-03-22T00:00:00.000Z",
+      },
+    ];
+    let hideExistingIdentityOnce = true;
+
+    const users: UserRepository = {
+      findById: async (id) => userStore.get(id) ?? null,
+      findByMessagingIdentity: async (_channel, identity) => {
+        if (hideExistingIdentityOnce && identity === "+819012345678") {
+          hideExistingIdentityOnce = false;
+          return null;
+        }
+
+        const match = identities.find((item) => item.identity === identity);
+        return match ? (userStore.get(match.userId) ?? null) : null;
+      },
+      listMessagingIdentities: async (userId) => identities.filter((item) => item.userId === userId),
+      createUser: async (input) => {
+        const user: User = {
+          id: input.id,
+          resourceKey: input.resourceKey,
+          displayName: input.displayName ?? null,
+          createdAt: input.createdAt,
+          updatedAt: input.updatedAt,
+        };
+        userStore.set(user.id, user);
+        return user;
+      },
+      createMessagingIdentity: async (input) => {
+        const existing = identities.find((item) => item.channel === input.channel && item.identity === input.identity);
+        if (!existing) {
+          identities.push({
+            id: input.id,
+            userId: input.userId,
+            channel: input.channel,
+            identity: input.identity,
+            identityType: input.identityType,
+            createdAt: input.createdAt,
+          });
+        }
+
+        return {
+          id: input.id,
+          userId: input.userId,
+          channel: input.channel,
+          identity: input.identity,
+          identityType: input.identityType,
+          createdAt: input.createdAt,
+        };
+      },
+      updateDisplayName: async () => {},
+    };
+    const wallets: WalletRepository = {
+      findPrimaryWalletByUserId: async () => null,
+      upsertPrimaryWallet: async () => {
+        throw new Error("not used");
+      },
+      updateWalletStatus: async () => {},
+      updateSignerStatus: async () => {},
+    };
+    const resolver = new UserContextResolver(users, wallets);
+
+    const context = await resolver.resolve({
+      sender: "+819012345678",
+      text: "hello",
+    });
+
+    expect(context.id).toBe("existing-user");
+    expect(context.resourceKey).toBe("user:existing-user");
+  });
 });

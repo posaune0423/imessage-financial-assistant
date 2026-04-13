@@ -14,6 +14,7 @@ export async function createSqliteRepositoryContext(databaseUrl: string): Promis
   const client = createClient({
     url: databaseUrl,
   });
+  await client.execute("PRAGMA foreign_keys = ON");
   const db = drizzle(client, { schema });
   await schema.ensureSqliteSchema(db);
 

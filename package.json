@@ -29,6 +29,7 @@
     "@nktkas/hyperliquid": "^0.32.1",
     "@photon-ai/imessage-kit": "^2.1.2",
     "@t3-oss/env-core": "^0.13.10",
+    "@turnkey/http": "^2.16.0",
     "@turnkey/sdk-server": "^5.1.1",
     "@turnkey/viem": "^0.14.26",
     "consola": "^3.4.2",

@@ -56,10 +56,11 @@ export class UserContextResolver {
     const user = (await this.findExistingUser(candidates)) ?? (await this.createUser());
 
     await this.bindMissingIdentities(user.id, candidates);
+    const resolvedUser = (await this.findExistingUser(candidates)) ?? user;
 
-    const existingUser = await this.users.findById(user.id);
+    const existingUser = await this.users.findById(resolvedUser.id);
     if (!existingUser) {
-      throw new Error(`Failed to reload user ${user.id}`);
+      throw new Error(`Failed to reload user ${resolvedUser.id}`);
     }
 
     const wallet = await this.wallets.findPrimaryWalletByUserId(existingUser.id);

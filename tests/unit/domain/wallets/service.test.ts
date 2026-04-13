@@ -34,6 +34,12 @@ const degradedSignerWallet = {
   signerStatus: "degraded" as const,
 };
 
+const provisioningWallet = {
+  ...readyWallet,
+  status: "provisioning" as const,
+  signerStatus: "bootstrapping" as const,
+};
+
 function createWalletRepository(wallet: AppWallet | null = readyWallet): WalletRepository {
   return {
     findPrimaryWalletByUserId: vi.fn().mockResolvedValue(wallet),
@@ -77,6 +83,17 @@ describe("WalletService", () => {
     expect(provisioning.ensurePrimaryWallet).toHaveBeenCalledWith(userContext, { force: true });
   });
 
+  it("awaits ongoing provisioning without forcing a duplicate reprovision", async () => {
+    const wallets = createWalletRepository(provisioningWallet);
+    const provisioning = {
+      ensurePrimaryWallet: vi.fn().mockResolvedValue(readyWallet),
+    };
+    const service = new WalletService(wallets, provisioning as never);
+
+    await expect(service.ensurePrimaryWallet(userContext)).resolves.toEqual(readyWallet);
+    expect(provisioning.ensurePrimaryWallet).toHaveBeenCalledWith(userContext, { force: false });
+  });
+
   it("provisions when the current wallet is missing", async () => {
     const wallets = createWalletRepository(null);
     const provisioning = {
@@ -85,6 +102,6 @@ describe("WalletService", () => {
     const service = new WalletService(wallets, provisioning as never);
 
     await expect(service.ensurePrimaryWallet(userContext)).resolves.toEqual(readyWallet);
-    expect(provisioning.ensurePrimaryWallet).toHaveBeenCalledWith(userContext, { force: true });
+    expect(provisioning.ensurePrimaryWallet).toHaveBeenCalledWith(userContext, { force: false });
   });
 });

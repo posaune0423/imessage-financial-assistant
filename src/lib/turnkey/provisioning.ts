@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import type { UserContext } from "../../domain/users/types";
+import type { AppWallet, UserContext } from "../../domain/users/types";
 import type { UpsertAppWalletInput, WalletRepository } from "../../repositories/interfaces/wallet-repository";
 import type { TurnkeyProvisioningAdapter, TurnkeyProvisioningPort } from "./interfaces";
 
@@ -9,17 +9,40 @@ function nowIso() {
 }
 
 export class TurnkeyProvisioningService implements TurnkeyProvisioningPort {
+  private readonly inFlightProvisioning = new Map<string, Promise<AppWallet>>();
+
   constructor(
     private readonly wallets: WalletRepository,
     private readonly turnkey: TurnkeyProvisioningAdapter,
   ) {}
 
   async ensurePrimaryWallet(userContext: UserContext, options?: { force?: boolean }) {
-    const current = await this.wallets.findPrimaryWalletByUserId(userContext.id);
-    if (!options?.force && current?.status === "ready") {
-      return current;
+    if (!options?.force) {
+      const inFlight = this.inFlightProvisioning.get(userContext.id);
+      if (inFlight) {
+        return inFlight;
+      }
     }
+    const provisioningPromise = (async () => {
+      const current = await this.wallets.findPrimaryWalletByUserId(userContext.id);
+      if (!options?.force && current?.status === "ready") {
+        return current;
+      }
 
+      return this.runProvisioning(userContext, current);
+    })();
+    this.inFlightProvisioning.set(userContext.id, provisioningPromise);
+
+    try {
+      return await provisioningPromise;
+    } finally {
+      if (this.inFlightProvisioning.get(userContext.id) === provisioningPromise) {
+        this.inFlightProvisioning.delete(userContext.id);
+      }
+    }
+  }
+
+  private async runProvisioning(userContext: UserContext, current: AppWallet | null) {
     const startedAt = nowIso();
     const walletId = current?.id ?? randomUUID();
 

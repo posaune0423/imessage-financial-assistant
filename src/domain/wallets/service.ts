@@ -22,6 +22,8 @@ export class WalletService {
       return existing;
     }
 
-    return this.provisioning.ensurePrimaryWallet(userContext, { force: force || !isWalletFullyReady(existing) });
+    const shouldForce =
+      force || (existing !== null && existing.status !== "provisioning" && !isWalletFullyReady(existing));
+    return this.provisioning.ensurePrimaryWallet(userContext, { force: shouldForce });
   }
 }

@@ -1,6 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { env } from "../../../src/env";
+
+afterEach(() => {
+  delete process.env.MULTI_USER_MODE;
+});
 
 describe("env", () => {
   it("has required fields populated", () => {
@@ -19,5 +23,13 @@ describe("env", () => {
     expect(env.DATABASE_URL).toBe("file:./data/test-agent.db");
     expect(env.IMESSAGE_SCHEDULER_PERSIST_PATH).toBe("./data/test-imessage-scheduler.json");
     expect(env.LOG_LEVEL).toBe("error");
+  });
+
+  it('parses MULTI_USER_MODE="false" as false', async () => {
+    process.env.MULTI_USER_MODE = "false";
+    vi.resetModules();
+    const { env: reloadedEnv } = await import("../../../src/env");
+
+    expect(reloadedEnv.MULTI_USER_MODE).toBe(false);
   });
 });
