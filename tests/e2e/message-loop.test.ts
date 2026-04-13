@@ -51,6 +51,27 @@ describe("message loop", () => {
     expect(sendMessage).toHaveBeenCalledWith("+819012345678", "了解しました。");
   });
 
+  it("uses chatId as the conversation key and reply target when available", async () => {
+    const generate = vi.fn().mockResolvedValue({ text: "了解しました。" });
+    const sendMessage = vi.fn();
+    const handler = createDirectMessageHandler({
+      ownerPhone,
+      agent: { generate } as never,
+      sendMessage,
+      maxSteps: 3,
+    });
+
+    await handler({ sender: "090-1234-5678", chatId: "chat-1", text: "こんにちは" });
+
+    expect(generate).toHaveBeenCalledWith(
+      "こんにちは",
+      expect.objectContaining({
+        memory: { resource: "chat-1", thread: "default" },
+      }),
+    );
+    expect(sendMessage).toHaveBeenCalledWith("chat-1", "了解しました。");
+  });
+
   it("resolves MCP toolsets only for likely MCP-heavy requests", async () => {
     const generate = vi.fn().mockResolvedValue({ text: "残高を確認します。" });
     const sendMessage = vi.fn();
@@ -177,6 +198,36 @@ describe("message loop", () => {
     expect(infoSpy).not.toHaveBeenCalledWith(expect.stringContaining("Finished task A"));
 
     infoSpy.mockRestore();
+  });
+
+  it("does not send a progress reply for internal-only working-memory tool steps", async () => {
+    const sendMessage = vi.fn();
+    const generate = vi.fn(async (_text: string, options: { onStepFinish?: (step: unknown) => Promise<void> }) => {
+      await options.onStepFinish?.({
+        toolCalls: [
+          {
+            payload: {
+              toolCallId: "tool-call-3",
+              toolName: "updateWorkingMemory",
+              args: { memory: "# Owner Profile\n- Name: Test" },
+            },
+          },
+        ],
+      });
+
+      return { text: "覚えておきます。" };
+    });
+    const handler = createDirectMessageHandler({
+      ownerPhone,
+      agent: { generate } as never,
+      sendMessage,
+      maxSteps: 3,
+    });
+
+    await handler({ sender: "+819012345678", text: "これ覚えておいて" });
+
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(sendMessage).toHaveBeenCalledWith("+819012345678", "覚えておきます。");
   });
 
   it("sends a short fallback reply on Anthropic rate limit errors", async () => {

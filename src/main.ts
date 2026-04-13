@@ -9,12 +9,13 @@ import { createMcpRuntime } from "./agents/mcp";
 import { createAgentRequestContext } from "./agents/request-context";
 import { createAgentToolRuntime, createAgentTools } from "./agents/tools";
 import { logger } from "./utils/logger";
-import { samePhone } from "./utils/phone";
+import { acquireProcessLock } from "./utils/process-lock";
 
 interface DirectMessage {
   sender?: string | null;
   chatId?: string | null;
   text?: string | null;
+  isReaction?: boolean;
 }
 
 interface ToolCallLike {
@@ -52,6 +53,8 @@ const MCP_KEYWORD_PATTERN =
 const TOOL_PROGRESS_REPLY = "確認しながら進めています。少し待ってください。";
 const LOG_VALUE_LIMIT = 400;
 const WORKING_MEMORY_TOOL_NAME = "updateWorkingMemory";
+const PROCESS_LOCK_PATH = "./data/imessage-agent.lock";
+const NON_PROGRESS_TOOL_NAMES = new Set([WORKING_MEMORY_TOOL_NAME]);
 
 function formatLogValue(value: unknown): string {
   try {
@@ -103,6 +106,15 @@ function logToolStep(step: StepLike) {
       `[agent] tool-result id=${toolResult.payload.toolCallId} name=${toolResult.payload.toolName} status=${status} result=${formatLogValue(toolResult.payload.result)}`,
     );
   }
+}
+
+function shouldSendToolProgressReply(step: StepLike): boolean {
+  const toolCalls = step.toolCalls ?? [];
+  if (toolCalls.length === 0) {
+    return false;
+  }
+
+  return toolCalls.some((toolCall) => !NON_PROGRESS_TOOL_NAMES.has(toolCall.payload.toolName));
 }
 
 function getRetryAfterSeconds(error: unknown): number | null {
@@ -160,11 +172,12 @@ export function getDirectMessageFailureReply(error: unknown): string {
 export function createDirectMessageHandler(deps: DirectMessageHandlerDeps) {
   return async (message: DirectMessage) => {
     const sender = message.sender?.trim() || message.chatId?.trim();
+    const replyTarget = message.chatId?.trim() || sender;
     const text = message.text?.trim();
-    if (!sender || !text || !samePhone(sender, deps.ownerPhone)) return;
+    if (!sender || !replyTarget || !text || message.isReaction) return;
     let sentToolProgressReply = false;
 
-    logger.info(`[imessage] <- sender=${sender} text=${JSON.stringify(text)}`);
+    logger.info(`[imessage] <- sender=${sender} target=${replyTarget} text=${JSON.stringify(text)}`);
 
     try {
       const requestContext = createAgentRequestContext({
@@ -174,20 +187,20 @@ export function createDirectMessageHandler(deps: DirectMessageHandlerDeps) {
       });
       const toolsets = shouldResolveMcpToolsets(text) ? await deps.resolveToolsets?.() : undefined;
       const result = await deps.agent.generate(text, {
-        memory: { resource: sender, thread: "default" },
+        memory: { resource: replyTarget, thread: "default" },
         maxSteps: deps.maxSteps,
         toolsets,
         requestContext,
         onStepFinish: async (step) => {
           logToolStep(step as StepLike);
 
-          if (sentToolProgressReply || !(step as StepLike).toolCalls?.length) {
+          if (sentToolProgressReply || !shouldSendToolProgressReply(step as StepLike)) {
             return;
           }
 
           sentToolProgressReply = true;
-          logger.info(`[imessage] -> to=${sender} text=${JSON.stringify(TOOL_PROGRESS_REPLY)}`);
-          await deps.sendMessage(sender, TOOL_PROGRESS_REPLY);
+          logger.info(`[imessage] -> to=${replyTarget} text=${JSON.stringify(TOOL_PROGRESS_REPLY)}`);
+          await deps.sendMessage(replyTarget, TOOL_PROGRESS_REPLY);
         },
       });
       const reply = result.text.trim();
@@ -195,21 +208,23 @@ export function createDirectMessageHandler(deps: DirectMessageHandlerDeps) {
         return;
       }
 
-      logger.info(`[imessage] -> to=${sender} text=${JSON.stringify(reply)}`);
-      await deps.sendMessage(sender, reply);
+      logger.info(`[imessage] -> to=${replyTarget} text=${JSON.stringify(reply)}`);
+      await deps.sendMessage(replyTarget, reply);
     } catch (error) {
       logger.error("[imessage] failed to handle direct message", error);
       const failureReply = getDirectMessageFailureReply(error);
-      logger.info(`[imessage] -> to=${sender} text=${JSON.stringify(failureReply)}`);
-      await deps.sendMessage(sender, failureReply);
+      logger.info(`[imessage] -> to=${replyTarget} text=${JSON.stringify(failureReply)}`);
+      await deps.sendMessage(replyTarget, failureReply);
     }
   };
 }
 
 export async function main() {
+  const releaseProcessLock = acquireProcessLock(PROCESS_LOCK_PATH);
   const sdk = new IMessageSDK({
     watcher: { excludeOwnMessages: true },
   });
+  const sendMessage = async (to: string, text: string) => sdk.send(to, text);
 
   const toolRuntime = createAgentToolRuntime(sdk, appConfig.tools.runtime, {
     scheduler: createSchedulingLifecycleLogger("scheduler"),
@@ -222,7 +237,7 @@ export async function main() {
   const heartbeat = new HeartbeatEngine({
     agent,
     ownerPhone: appConfig.ownerPhone,
-    sendMessage: async (to, text) => sdk.send(to, text),
+    sendMessage,
     heartbeat: appConfig.heartbeat,
     maxSteps: appConfig.agent.maxSteps,
   });
@@ -230,31 +245,43 @@ export async function main() {
   const onDirectMessage = createDirectMessageHandler({
     ownerPhone: appConfig.ownerPhone,
     agent,
-    sendMessage: async (to, text) => sdk.send(to, text),
+    sendMessage,
     resolveToolsets: mcp.getToolsets,
     maxSteps: appConfig.agent.maxSteps,
   });
 
+  let isShuttingDown = false;
   const shutdown = async () => {
+    if (isShuttingDown) {
+      return;
+    }
+
+    isShuttingDown = true;
     logger.info("Shutting down...");
     toolRuntime.destroy();
     heartbeat.stop();
     sdk.stopWatching();
     await mcp.client?.disconnect();
     await sdk.close();
+    releaseProcessLock();
     process.exit(0);
   };
 
   process.once("SIGINT", () => void shutdown());
   process.once("SIGTERM", () => void shutdown());
 
-  await sdk.startWatching({
-    onDirectMessage,
-    onError: (error) => logger.error("[imessage] watcher error", error),
-  });
+  try {
+    await sdk.startWatching({
+      onDirectMessage,
+      onError: (error) => logger.error("[imessage] watcher error", error),
+    });
 
-  heartbeat.start();
-  logger.info("Agent started. Waiting for messages...");
+    heartbeat.start();
+    logger.info(`Agent started. Waiting for messages... pid=${process.pid}`);
+  } catch (error) {
+    releaseProcessLock();
+    throw error;
+  }
 }
 
 if (import.meta.main) {

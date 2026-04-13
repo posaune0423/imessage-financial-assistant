@@ -10,4 +10,8 @@ describe("phone utils", () => {
   it("compares equivalent phone strings", () => {
     expect(samePhone("+81 90-1234-5678", "+819012345678")).toBe(true);
   });
+
+  it("matches local format numbers against international owner numbers", () => {
+    expect(samePhone("090-1234-5678", "+819012345678")).toBe(true);
+  });
 });
